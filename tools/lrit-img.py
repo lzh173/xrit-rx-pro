@@ -1,6 +1,6 @@
 """
 lrit-img.py
-https://github.com/sam210723/xrit-rx
+https://github.com/lzh173/xrit-rx
 
 Generates JPEG images from LRIT IMG files.
 """

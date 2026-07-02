@@ -1,6 +1,6 @@
 """
 dash.py
-https://github.com/sam210723/xrit-rx
+https://github.com/lzh173/xrit-rx
 
 Dashboard HTTP server
 """
@@ -111,6 +111,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             fc_files.sort(reverse=True)
                             fc_path = os.path.join(fc_dir, fc_files[0])
                             self.serve_latest(fc_path)
+                            return
+                self.serve_latest(None)
+                return
+
+            # Serve latest Infrared Enhanced (IRE) image directly
+            if self.path == "/latest_FDIRE":
+                fd_img = demuxer_instance.lastImageFD
+                if fd_img:
+                    ire_dir = os.path.join(os.path.dirname(fd_img), "IRE")
+                    if os.path.isdir(ire_dir):
+                        ire_files = [f for f in os.listdir(ire_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
+                        if ire_files:
+                            ire_files.sort(reverse=True)
+                            ire_path = os.path.join(ire_dir, ire_files[0])
+                            self.serve_latest(ire_path)
                             return
                 self.serve_latest(None)
                 return

@@ -1,7 +1,7 @@
 'use strict';
 /**
  *  dash.js
- *  https://github.com/sam210723/xrit-rx
+ *  https://github.com/lzh173/xrit-rx
  *
  *  Updates dashboard data through xrit-rx API
  */
@@ -531,7 +531,7 @@ function configure()
     // Set heading and window title
     var heading = document.getElementById("dash-heading");
     heading.innerHTML =  `${config.spacecraft} ${config.downlink} 仪表板`;
-    heading.innerHTML += `<span>xrit-rx <a href="https://github.com/sam210723/xrit-rx/releases/tag/v${config.version}" target="_blank" title="在 GitHub 上查看发布说明">v${config.version}</a></span>`;
+    heading.innerHTML += `<span>xrit-rx <a href="https://github.com/lzh173/xrit-rx/releases/tag/v${config.version}" target="_blank" title="在 GitHub 上查看发布说明">v${config.version}</a></span>`;
     document.title = `${config.spacecraft} ${config.downlink} - xrit-rx v${config.version}`;
 
     // Build blocks

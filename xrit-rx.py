@@ -1,6 +1,6 @@
 """
 xrit-rx.py
-https://github.com/sam210723/xrit-rx
+https://github.com/lzh173/xrit-rx
 
 Frontend for CCSDS demultiplexer and image generator
 """

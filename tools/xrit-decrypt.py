@@ -1,6 +1,6 @@
 """
 xrit-decrypt.py
-https://github.com/sam210723/xrit-rx
+https://github.com/lzh173/xrit-rx
 
 Decrypts xRIT files into a plain-text xRIT file using single layer DES
 """

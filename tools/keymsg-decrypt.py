@@ -1,6 +1,6 @@
 """
 keymsg-decrypt.py
-https://github.com/sam210723/xrit-rx
+https://github.com/lzh173/xrit-rx
 
 Decrypts KMA Encryption Key Message files for GK-2A xRIT decryption.
 """

@@ -1,6 +1,6 @@
 """
 products.py
-https://github.com/sam210723/xrit-rx
+https://github.com/lzh173/xrit-rx
 
 Parsing and assembly functions for downlinked products
 """
@@ -10,7 +10,10 @@ import colorama
 from colorama import Fore, Back, Style
 import io
 import numpy as np
+import os
 import pathlib
+import shutil
+import sys
 from PIL import Image, ImageFile, UnidentifiedImageError
 import subprocess
 
@@ -233,6 +236,11 @@ class MultiSegmentImage(Product):
             img.save(channel_path, format='JPEG', subsampling=0, quality=100)
             print("    " + Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(channel_path))
             self.last = channel_path
+
+            # Auto-generate False Color (FC) for Full Disk images
+            if self.name.mode == "FD":
+                self._generate_fc(channel_path)
+                self._generate_ire(channel_path)
     
     def convert_to_img(self, path, name, data):
         """
@@ -326,6 +334,84 @@ class MultiSegmentImage(Product):
             self.lastproglen += 1
         
         print(line, end="", flush=True)
+
+    def _generate_fc(self, source_path):
+        """
+        Auto-generate False Color (FC) image using Sanchez reproject
+        Only runs if Sanchez.exe exists
+        """
+
+        sanchez = os.path.join(os.path.dirname(__file__), "tools", "Sanchez", "Sanchez.exe")
+        if not os.path.isfile(sanchez):
+            return
+
+        # Build FC output path: .../FD/FC/same_filename.jpg
+        fc_dir = os.path.join(os.path.dirname(source_path), "FC")
+        os.makedirs(fc_dir, exist_ok=True)
+        fc_path = os.path.join(fc_dir, os.path.basename(source_path))
+
+        # Skip if FC already exists
+        if os.path.isfile(fc_path):
+            print("    FC 已存在，跳过：\"{}\"".format(fc_path))
+            return
+
+        print("    " + Fore.CYAN + Style.BRIGHT + "正在生成假彩色...", end="")
+        try:
+            subprocess.run(
+                [sanchez, "reproject", "-s", source_path, "stitch", "-fa", "-b", "1.2", "-o", fc_path],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120
+            )
+            if os.path.isfile(fc_path):
+                print(Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(fc_path))
+            else:
+                print(Fore.WHITE + Back.RED + Style.BRIGHT + "失败")
+        except Exception as e:
+            print(Fore.WHITE + Back.RED + Style.BRIGHT + "错误：{}".format(e))
+
+    def _generate_ire(self, source_path):
+        """
+        Auto-generate Infrared Enhanced (IRE) image using enhance-ir.py
+        """
+
+        script = os.path.join(os.path.dirname(__file__), "tools", "enhance-ir.py")
+        if not os.path.isfile(script):
+            return
+
+        # Build IRE output path: .../FD/IRE/same_filename.jpg
+        ire_dir = os.path.join(os.path.dirname(source_path), "IRE")
+        os.makedirs(ire_dir, exist_ok=True)
+        ire_path = os.path.join(ire_dir, os.path.basename(source_path))
+
+        # Skip if IRE already exists
+        if os.path.isfile(ire_path):
+            print("    IRE 已存在，跳过：\"{}\"".format(ire_path))
+            return
+
+        print("    " + Fore.CYAN + Style.BRIGHT + "正在增强红外...", end="")
+        try:
+            # Copy source to IRE dir (enhance-ir.py outputs next to input)
+            temp_copy = os.path.join(ire_dir, os.path.basename(source_path))
+            shutil.copy2(source_path, temp_copy)
+
+            # Run enhance-ir on the copy
+            subprocess.run(
+                [sys.executable, script, temp_copy, "-s", "-o"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120
+            )
+
+            # The script creates temp_copy_ENHANCED.jpg → rename to final name
+            enhanced_tmp = temp_copy.replace('.jpg', '_ENHANCED.jpg')
+            if os.path.isfile(enhanced_tmp):
+                os.rename(enhanced_tmp, ire_path)
+                print(Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(ire_path))
+            else:
+                print(Fore.WHITE + Back.RED + Style.BRIGHT + "红外增强失败")
+
+            # Clean up temp copy
+            if os.path.isfile(temp_copy):
+                os.remove(temp_copy)
+        except Exception as e:
+            print(Fore.WHITE + Back.RED + Style.BRIGHT + "错误：{}".format(e))
 
 
 class SingleSegmentImage(Product):
