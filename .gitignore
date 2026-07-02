@@ -19,7 +19,7 @@ tools/libjpeg/LICENSE
 tools/libjpeg/README
 
 # Scripts
-*.ps1
+
 *.bat
 *.cmd
 
