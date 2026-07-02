@@ -1,0 +1,27 @@
+__pycache__/
+*.pyc
+*.pyo
+log/
+received/
+EncryptionKeyMessage.bin
+xrit-rx.ini
+sch_output.txt
+
+# VS
+.vs/
+
+# Build tools / binaries
+aria2-*/
+tools/aria2-*/
+tools/libjpeg/jpeg.exe
+tools/Sanchez/
+tools/libjpeg/LICENSE
+tools/libjpeg/README
+
+# Scripts
+*.ps1
+*.bat
+*.cmd
+
+# Logs
+*.log
