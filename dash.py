@@ -18,6 +18,11 @@ dash_config = None
 demuxer_instance = None
 
 
+def _np(path):
+    """Normalize path to use forward slashes (cross-platform compat for URLs)."""
+    return path.replace("\\", "/") if path else path
+
+
 def scan_latest_fd(output_path):
     """Scan received directory for the latest FD image."""
     base = os.path.join(output_path, "LRIT")
@@ -29,7 +34,7 @@ def scan_latest_fd(output_path):
         if os.path.isdir(fd_dir):
             files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
             if files:
-                return os.path.join(fd_dir, files[0]), date
+                return _np(os.path.join(fd_dir, files[0])), date
     return None, None
 
 
@@ -44,7 +49,7 @@ def scan_latest_fc(output_path):
         if os.path.isdir(fc_dir):
             files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
             if files:
-                return os.path.join(fc_dir, files[0])
+                return _np(os.path.join(fc_dir, files[0]))
     return None
 
 
@@ -59,7 +64,7 @@ def scan_latest_ire(output_path):
         if os.path.isdir(ire_dir):
             files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
             if files:
-                return os.path.join(ire_dir, files[0])
+                return _np(os.path.join(ire_dir, files[0]))
     return None
 
 
@@ -79,7 +84,7 @@ def scan_latest_add(output_path):
             if os.path.isdir(sub):
                 files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
                 if files:
-                    return os.path.join(sub, files[0])
+                    return _np(os.path.join(sub, files[0]))
     return None
 
 
@@ -92,7 +97,6 @@ def get_available_dates(output_path):
     for d in sorted(os.listdir(base), reverse=True):
         date_dir = os.path.join(base, d)
         if os.path.isdir(date_dir):
-            # Count image files
             count = 0
             for root, dirs, files in os.walk(date_dir):
                 for f in files:
@@ -462,15 +466,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 for f in sorted(os.listdir(sub)):
                     fpath = os.path.join(sub, f)
                     if os.path.isfile(fpath) and f.lower().endswith(('.jpg', '.png')):
-                        # Check for FC/IRE subdirectories
-                        info = {"name": f, "path": fpath}
-                        # Check FC
+                        info = {"name": f, "path": _np(fpath)}
+                        # Check FC subdirectory
                         fc_path = os.path.join(sub, "FC", f)
                         if os.path.isfile(fc_path):
-                            info["fc"] = fc_path
+                            info["fc"] = _np(fc_path)
                         ire_path = os.path.join(sub, "IRE", f)
                         if os.path.isfile(ire_path):
-                            info["ire"] = ire_path
+                            info["ire"] = _np(ire_path)
                         item["files"].append(info)
                 if item["files"]:
                     products.append(item)

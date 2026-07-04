@@ -72,8 +72,8 @@ def init():
     if args.offline:
         print(Fore.GREEN + Style.BRIGHT + "离线模式：仅启动 Web 产品查看器\n")
 
-        # Resolve output path to absolute
-        offline_output = path.abspath(output)
+        # Resolve output path to absolute with forward slashes
+        offline_output = path.abspath(output).replace("\\", "/")
 
         if dashe:
             dash_config = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')

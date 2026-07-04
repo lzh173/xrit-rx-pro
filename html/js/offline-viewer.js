@@ -12,6 +12,8 @@ var currentDate = null;
 var currentType = 'FD';
 var imageCache = {};
 var pollInterval = 30;  // seconds
+var refreshTimer = null;    // Timer handle for auto-refresh
+var isViewingLatest = true; // Tracks if user is on the latest date
 
 // Schedule data from dash.js (copied inline since it's identical)
 var sch = [
@@ -544,6 +546,7 @@ function loadDates()
 function loadDateProducts(date)
 {
     currentDate = date;
+    isViewingLatest = (dates.length > 0 && date == dates[0].date);
     print("正在加载：" + date, "VIEWER");
 
     http_get(`/api/offline/date/${date}`, (res) => {
@@ -608,9 +611,10 @@ function renderProducts(data)
     html += '  <div class="main-image">';
 
     // Main image
-    var mainSrc = getImageUrl('FD');
+    var mainSrc = getImageUrl('FD') || '';
     html += '    <a href="' + mainSrc + '" target="_blank" id="main-link">';
-    html += '      <img id="main-img" src="' + mainSrc + '" alt="FD">';
+    html += '      <img id="main-img" src="' + mainSrc + '" alt="FD" onerror="this.style.display=\'none\';document.getElementById(\'img-error\').style.display=\'block\'">';
+    html += '      <div id="img-error" style="display:none;padding:40px;text-align:center;color:#999;">图片加载失败</div>';
     html += '    </a>';
 
     // Image info
@@ -633,8 +637,9 @@ function renderProducts(data)
     ];
     types.forEach(function(t) {
         var url = getImageUrl(t.key);
+        var isActive = (t.key == 'FD') ? ' active' : '';
         if (url) {
-            html += '    <div class="thumb-row active" id="thumb-' + t.key + '" onclick="switchImage(\'' + t.key + '\')">';
+            html += '    <div class="thumb-row' + isActive + '" id="thumb-' + t.key + '" onclick="switchImage(\'' + t.key + '\')">';
             html += '      <img src="' + url + '" alt="' + t.label + '">';
             html += '      <div class="thumb-info">';
             html += '        <div class="label">' + t.label + '</div>';
@@ -642,7 +647,7 @@ function renderProducts(data)
             html += '      </div>';
             html += '    </div>';
         } else {
-            html += '    <div class="thumb-row" id="thumb-' + t.key + '" style="opacity:0.4;cursor:default;">';
+            html += '    <div class="thumb-row' + isActive + '" id="thumb-' + t.key + '" style="opacity:0.4;cursor:default;">';
             html += '      <div class="no-thumb">?</div>';
             html += '      <div class="thumb-info">';
             html += '        <div class="label">' + t.label + '</div>';
@@ -662,9 +667,14 @@ function renderProducts(data)
     // Update date nav buttons
     updateNavButtons();
 
-    // Start auto-refresh for new images
-    if (dates.length > 0 && currentDate == dates[0].date) {
-        setTimeout(() => { refreshLatest(); }, pollInterval * 1000);
+    // Cancel any pending refresh timer
+    if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+    }
+    // Start auto-refresh only when viewing the latest date
+    if (isViewingLatest) {
+        refreshTimer = setTimeout(refreshLatest, pollInterval * 1000);
     }
 }
 
@@ -675,7 +685,14 @@ function switchImage(type)
     if (!url) return;
 
     currentType = type;
-    document.getElementById("main-img").src = url;
+    var img = document.getElementById("main-img");
+    var errDiv = document.getElementById("img-error");
+
+    // Show loading state
+    img.style.display = 'block';
+    if (errDiv) errDiv.style.display = 'none';
+
+    img.src = url;
     document.getElementById("main-link").href = url;
     document.getElementById("info-link").href = url;
 
@@ -710,6 +727,7 @@ function navigateDate(direction)
     if (newIdx < 0 || newIdx >= dates.length) return;
 
     currentDate = dates[newIdx].date;
+    isViewingLatest = (newIdx == 0);
     document.getElementById("date-label").textContent = formatDate(currentDate);
     loadDateProducts(currentDate);
 }
@@ -728,32 +746,35 @@ function updateNavButtons()
 
 function refreshLatest()
 {
-    // Only refresh if we're viewing the latest date
-    if (dates.length == 0 || currentDate != dates[0].date) return;
+    if (dates.length == 0 || !isViewingLatest) return;
 
-    // Re-fetch dates to check for new data
     http_get("/api/offline/dates", (res) => {
         if (res.status == 200) {
             res.json().then((data) => {
-                var oldDate = currentDate;
+                // If user navigated away while HTTP was in flight, bail out
+                if (!isViewingLatest) return;
+
+                var prevDate = currentDate;
                 dates = data;
 
-                // If current date changed or we need to refresh
                 if (dates.length > 0) {
-                    currentDate = dates[0].date;
-                    if (currentDate != oldDate) {
-                        // New date appears, reload
-                        loadDateProducts(currentDate);
+                    var latestDate = dates[0].date;
+                    if (latestDate != prevDate) {
+                        // A new date appeared — reload from that date
+                        currentDate = latestDate;
+                        document.getElementById("date-label").textContent = formatDate(currentDate);
+                        loadDateProducts(latestDate);
+                        return;
                     } else {
-                        // Same date, just re-fetch latest FD
+                        // Same date, re-fetch products to check for new images
                         http_get("/api/offline/date/" + currentDate, (res) => {
                             if (res.status == 200) {
                                 res.json().then((data) => {
-                                    var oldImg = imageCache['FD'] || '';
+                                    if (!isViewingLatest) return;
+                                    var oldFD = imageCache['FD'] || '';
                                     renderProducts(data);
-                                    var newImg = imageCache['FD'] || '';
-                                    // Only auto-switch to FD if it changed
-                                    if (oldImg != newImg) {
+                                    var newFD = imageCache['FD'] || '';
+                                    if (oldFD != newFD) {
                                         print("检测到新图片：" + getFileName('FD'), "VIEWER");
                                         switchImage('FD');
                                     }
@@ -763,8 +784,8 @@ function refreshLatest()
                     }
                 }
 
-                // Schedule next refresh
-                setTimeout(() => { refreshLatest(); }, pollInterval * 1000);
+                // Schedule next refresh (timer stored globally)
+                refreshTimer = setTimeout(refreshLatest, pollInterval * 1000);
             });
         }
     });
