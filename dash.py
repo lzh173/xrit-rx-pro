@@ -10,7 +10,7 @@ import http.server
 import json
 import mimetypes
 import os
-import socketserver
+from socketserver import ThreadingTCPServer
 import glob
 from threading import Thread
 
@@ -118,7 +118,9 @@ class Dashboard:
         demuxer_instance = demuxer
 
         try:
-            self.socket = socketserver.TCPServer(("", int(dash_config.port)), Handler)
+            self.socket = ThreadingTCPServer(("", int(dash_config.port)), Handler)
+            self.socket.daemon_threads = True
+            self.socket.allow_reuse_address = True
         except OSError as e:
             if e.errno == 10048:
                 print("\n" + Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启动：端口已被占用")
