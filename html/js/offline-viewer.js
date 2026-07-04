@@ -507,6 +507,10 @@ function configure()
     setInterval(() => { block_time(); }, 100);
     block_time();
 
+    // Set time block heading
+    var timeHeading = document.querySelector('#block-time .block-heading');
+    if (timeHeading) timeHeading.textContent = '时间';
+
     block_schedule_init();
     loadDates();
 }
@@ -579,9 +583,18 @@ function renderViewer(data)
 
     var fdFiles = fdProduct.files;
 
-    // If no file selected or current file not in this date's files, select latest
-    var fileChanged = false;
-    if (!currentFile || fdFiles.every(function(f) { return f.path !== currentFile.path; })) {
+    // Check if currentFile still exists in this date's data
+    var fileStillExists = false;
+    if (currentFile) {
+        for (var pi = 0; pi < allProducts.length && !fileStillExists; pi++) {
+            var pf = allProducts[pi].files || [];
+            for (var fi = 0; fi < pf.length && !fileStillExists; fi++) {
+                if (pf[fi].path === currentFile.path) fileStillExists = true;
+            }
+        }
+    }
+
+    if (!currentFile || !fileStillExists) {
         currentFile = fdFiles[fdFiles.length - 1];
         currentType = 'FD';
         fileChanged = true;
