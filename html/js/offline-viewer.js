@@ -102,6 +102,11 @@ function renderViewer(data)
 {
     allProducts = data.products || [];
     var body = document.getElementById("viewer-body");
+
+    // Save product list scroll position
+    var oldProductList = document.getElementById("product-list");
+    var savedScrollTop = oldProductList ? oldProductList.scrollTop : 0;
+
     var hasFD = false;
 
     // Find FD files
@@ -213,6 +218,12 @@ function renderViewer(data)
     html += '</div>';   // end viewer-split
 
     body.innerHTML = html;
+
+    // Restore product list scroll position
+    var newProductList = document.getElementById("product-list");
+    if (newProductList && savedScrollTop > 0) {
+        newProductList.scrollTop = savedScrollTop;
+    }
 
     updateNavButtons();
 

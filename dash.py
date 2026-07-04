@@ -32,7 +32,7 @@ def scan_latest_fd(output_path):
     for date in dates:
         fd_dir = os.path.join(base, date, "FD")
         if os.path.isdir(fd_dir):
-            files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+            files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
             if files:
                 return _np(os.path.join(fd_dir, files[0])), date
     return None, None
@@ -47,7 +47,7 @@ def scan_latest_fc(output_path):
     for date in dates:
         fc_dir = os.path.join(base, date, "FD", "FC")
         if os.path.isdir(fc_dir):
-            files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+            files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
             if files:
                 return _np(os.path.join(fc_dir, files[0]))
     return None
@@ -62,7 +62,7 @@ def scan_latest_ire(output_path):
     for date in dates:
         ire_dir = os.path.join(base, date, "FD", "IRE")
         if os.path.isdir(ire_dir):
-            files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+            files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
             if files:
                 return _np(os.path.join(ire_dir, files[0]))
     return None
@@ -82,7 +82,7 @@ def scan_latest_add(output_path):
                 continue
             sub = os.path.join(date_dir, d)
             if os.path.isdir(sub):
-                files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
                 if files:
                     return _np(os.path.join(sub, files[0]))
     return None
@@ -100,7 +100,7 @@ def get_available_dates(output_path):
             count = 0
             for root, dirs, files in os.walk(date_dir):
                 for f in files:
-                    if f.lower().endswith(('.jpg', '.png')):
+                    if f.lower().endswith(('.jpg', '.png', '.gif')):
                         count += 1
             if count > 0:
                 dates.append({"date": d, "count": count})
@@ -206,7 +206,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if fd_img:
                         fc_dir = os.path.join(os.path.dirname(fd_img), "FC")
                         if os.path.isdir(fc_dir):
-                            fc_files = [f for f in os.listdir(fc_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
+                            fc_files = [f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))]
                             if fc_files:
                                 fc_files.sort(reverse=True)
                                 fp = os.path.join(fc_dir, fc_files[0])
@@ -222,7 +222,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if fd_img:
                         ire_dir = os.path.join(os.path.dirname(fd_img), "IRE")
                         if os.path.isdir(ire_dir):
-                            ire_files = [f for f in os.listdir(ire_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
+                            ire_files = [f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))]
                             if ire_files:
                                 ire_files.sort(reverse=True)
                                 fp = os.path.join(ire_dir, ire_files[0])
@@ -413,19 +413,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if img_type == "FD":
                     fd_dir = os.path.join(base, "FD")
                     if os.path.isdir(fd_dir):
-                        files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                        files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
                         if files:
                             content = {"path": os.path.join(fd_dir, files[0])}
                 elif img_type == "FC":
                     fc_dir = os.path.join(base, "FD", "FC")
                     if os.path.isdir(fc_dir):
-                        files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                        files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
                         if files:
                             content = {"path": os.path.join(fc_dir, files[0])}
                 elif img_type == "IRE":
                     ire_dir = os.path.join(base, "FD", "IRE")
                     if os.path.isdir(ire_dir):
-                        files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                        files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
                         if files:
                             content = {"path": os.path.join(ire_dir, files[0])}
                 elif img_type == "ADD":
@@ -434,7 +434,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         if d in skip_dirs: continue
                         sub = os.path.join(base, d)
                         if os.path.isdir(sub):
-                            files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                            files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png', '.gif'))], reverse=True)
                             if files:
                                 content = {"path": os.path.join(sub, files[0])}
                                 break
@@ -465,7 +465,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 item = {"name": d, "type": "directory", "files": []}
                 for f in sorted(os.listdir(sub)):
                     fpath = os.path.join(sub, f)
-                    if os.path.isfile(fpath) and f.lower().endswith(('.jpg', '.png')):
+                    if os.path.isfile(fpath) and f.lower().endswith(('.jpg', '.png', '.gif')):
                         info = {"name": f, "path": _np(fpath)}
                         # Check FC subdirectory
                         fc_path = os.path.join(sub, "FC", f)
