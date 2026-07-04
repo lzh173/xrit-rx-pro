@@ -11,10 +11,99 @@ import json
 import mimetypes
 import os
 import socketserver
+import glob
 from threading import Thread
 
 dash_config = None
 demuxer_instance = None
+
+
+def scan_latest_fd(output_path):
+    """Scan received directory for the latest FD image."""
+    base = os.path.join(output_path, "LRIT")
+    if not os.path.isdir(base):
+        return None, None
+    dates = sorted([d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))], reverse=True)
+    for date in dates:
+        fd_dir = os.path.join(base, date, "FD")
+        if os.path.isdir(fd_dir):
+            files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+            if files:
+                return os.path.join(fd_dir, files[0]), date
+    return None, None
+
+
+def scan_latest_fc(output_path):
+    """Scan for the latest FD/FC image."""
+    base = os.path.join(output_path, "LRIT")
+    if not os.path.isdir(base):
+        return None
+    dates = sorted([d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))], reverse=True)
+    for date in dates:
+        fc_dir = os.path.join(base, date, "FD", "FC")
+        if os.path.isdir(fc_dir):
+            files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+            if files:
+                return os.path.join(fc_dir, files[0])
+    return None
+
+
+def scan_latest_ire(output_path):
+    """Scan for the latest FD/IRE image."""
+    base = os.path.join(output_path, "LRIT")
+    if not os.path.isdir(base):
+        return None
+    dates = sorted([d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))], reverse=True)
+    for date in dates:
+        ire_dir = os.path.join(base, date, "FD", "IRE")
+        if os.path.isdir(ire_dir):
+            files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+            if files:
+                return os.path.join(ire_dir, files[0])
+    return None
+
+
+def scan_latest_add(output_path):
+    """Scan for the latest ADD image (any non-FD/ANT directory)."""
+    base = os.path.join(output_path, "LRIT")
+    if not os.path.isdir(base):
+        return None
+    skip_dirs = {'FD', 'ANT', 'LRIT_FILE', 'FC', 'IRE'}
+    dates = sorted([d for d in os.listdir(base) if os.path.isdir(os.path.join(base, d))], reverse=True)
+    for date in dates:
+        date_dir = os.path.join(base, date)
+        for d in sorted(os.listdir(date_dir)):
+            if d in skip_dirs:
+                continue
+            sub = os.path.join(date_dir, d)
+            if os.path.isdir(sub):
+                files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                if files:
+                    return os.path.join(sub, files[0])
+    return None
+
+
+def get_available_dates(output_path):
+    """Get list of available date directories with product counts."""
+    base = os.path.join(output_path, "LRIT")
+    if not os.path.isdir(base):
+        return []
+    dates = []
+    for d in sorted(os.listdir(base), reverse=True):
+        date_dir = os.path.join(base, d)
+        if os.path.isdir(date_dir):
+            # Count image files
+            count = 0
+            for root, dirs, files in os.walk(date_dir):
+                for f in files:
+                    if f.lower().endswith(('.jpg', '.png')):
+                        count += 1
+            if count > 0:
+                dates.append({"date": d, "count": count})
+            else:
+                dates.append({"date": d, "count": 0})
+    return dates
+
 
 class Dashboard:
     def __init__(self, config, demuxer):
@@ -28,10 +117,14 @@ class Dashboard:
             self.socket = socketserver.TCPServer(("", int(dash_config.port)), Handler)
         except OSError as e:
             if e.errno == 10048:
-                print("\n" + Fore.WHITE + Back.RED + Style.BRIGHT + "DASHBOARD NOT STARTED: PORT ALREADY IN USE")
+                print("\n" + Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启动：端口已被占用")
             else:
                 print(e)
             return
+
+        # Print offline mode status
+        if dash_config.offline:
+            print("产品查看器 HTTP 服务器已启动（端口 {}）".format(dash_config.port))
 
         # Start HTTP server thread
         self.httpd_thread = Thread()
@@ -46,7 +139,7 @@ class Dashboard:
         """
 
         self.socket.serve_forever()
-    
+
 
     def stop(self):
         """
@@ -76,48 +169,60 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         Respond to GET requests
         """
 
-        # Respond with index.html content on root path requests
-        if self.path == "/": self.path = "index.html"
+        # Offline mode root: serve product viewer
+        if self.path == "/" and dash_config.offline:
+            self.path = "html/offline-viewer.html"
+        elif self.path == "/":
+            self.path = "index.html"
 
         try:
-            # Serve latest Full Disk original image directly
+            # --- Image endpoints (work in both online and offline mode) ---
             if self.path == "/latest":
-                self.serve_latest(demuxer_instance.lastImageFD)
+                if dash_config.offline:
+                    fp, _ = scan_latest_fd(dash_config.output)
+                else:
+                    fp = demuxer_instance.lastImageFD if demuxer_instance else None
+                self.serve_latest(fp)
                 return
 
-            # Serve latest Additional Data image directly
             if self.path == "/latest_add":
-                self.serve_latest(demuxer_instance.lastImageADD)
+                if dash_config.offline:
+                    fp = scan_latest_add(dash_config.output)
+                else:
+                    fp = demuxer_instance.lastImageADD if demuxer_instance else None
+                self.serve_latest(fp)
                 return
 
-            # Serve latest False Color (FC) image directly
             if self.path == "/latest_FDFC":
-                fd_img = demuxer_instance.lastImageFD
-                if fd_img:
-                    fc_dir = os.path.join(os.path.dirname(fd_img), "FC")
-                    if os.path.isdir(fc_dir):
-                        fc_files = [f for f in os.listdir(fc_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
-                        if fc_files:
-                            fc_files.sort(reverse=True)
-                            fc_path = os.path.join(fc_dir, fc_files[0])
-                            self.serve_latest(fc_path)
-                            return
-                self.serve_latest(None)
+                if dash_config.offline:
+                    fp = scan_latest_fc(dash_config.output)
+                else:
+                    fp = None
+                    fd_img = demuxer_instance.lastImageFD if demuxer_instance else None
+                    if fd_img:
+                        fc_dir = os.path.join(os.path.dirname(fd_img), "FC")
+                        if os.path.isdir(fc_dir):
+                            fc_files = [f for f in os.listdir(fc_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
+                            if fc_files:
+                                fc_files.sort(reverse=True)
+                                fp = os.path.join(fc_dir, fc_files[0])
+                self.serve_latest(fp)
                 return
 
-            # Serve latest Infrared Enhanced (IRE) image directly
             if self.path == "/latest_FDIRE":
-                fd_img = demuxer_instance.lastImageFD
-                if fd_img:
-                    ire_dir = os.path.join(os.path.dirname(fd_img), "IRE")
-                    if os.path.isdir(ire_dir):
-                        ire_files = [f for f in os.listdir(ire_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
-                        if ire_files:
-                            ire_files.sort(reverse=True)
-                            ire_path = os.path.join(ire_dir, ire_files[0])
-                            self.serve_latest(ire_path)
-                            return
-                self.serve_latest(None)
+                if dash_config.offline:
+                    fp = scan_latest_ire(dash_config.output)
+                else:
+                    fp = None
+                    fd_img = demuxer_instance.lastImageFD if demuxer_instance else None
+                    if fd_img:
+                        ire_dir = os.path.join(os.path.dirname(fd_img), "IRE")
+                        if os.path.isdir(ire_dir):
+                            ire_files = [f for f in os.listdir(ire_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
+                            if ire_files:
+                                ire_files.sort(reverse=True)
+                                fp = os.path.join(ire_dir, ire_files[0])
+                self.serve_latest(fp)
                 return
 
             # Serve API list page
@@ -125,7 +230,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.serve_apilist()
                 return
 
-            if self.path.startswith("/api/") or self.path == "/api":    # API endpoint requests
+            # --- API endpoints ---
+            if self.path.startswith("/api/") or self.path == "/api":
                 content, status, mime = self.handle_api(self.path)
 
                 self.send_response(status)
@@ -160,6 +266,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             mime = mimetypes.guess_type(filepath)[0]
             self.send_header('Content-type', mime)
+            self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
             with open(filepath, 'rb') as f:
                 self.wfile.write(f.read())
@@ -174,6 +281,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """
 
         host = self.headers.get("Host", "localhost:1692")
+        mode_label = "离线浏览" if dash_config.offline else "正常接收"
         html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -188,10 +296,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         code {{ background: #16213e; padding: 2px 8px; border-radius: 4px; color: #f5a623; }}
         .desc {{ color: #aaa; margin-left: 12px; font-size: 14px; }}
         .endpoint {{ margin: 10px 0; }}
+        .mode {{ display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; margin-left: 12px; }}
+        .offline {{ background: #f5a623; color: #1a1a2e; }}
+        .online {{ background: #2ecc71; color: #1a1a2e; }}
     </style>
 </head>
 <body>
-    <h1>🌐 xrit-rx API 接口导航</h1>
+    <h1>🌐 xrit-rx API 接口导航 <span class="mode {'offline' if dash_config.offline else 'online'}">{mode_label}</span></h1>
 
     <h2>🖼️ 图片直出端点（浏览器直接打开）</h2>
     <div class="endpoint"><a href="http://{host}/latest" target="_blank">/latest</a> <span class="desc">最新全盘原图（FD）</span></div>
@@ -208,7 +319,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     <div class="endpoint"><a href="http://{host}/api/latest/xrit" target="_blank">/api/latest/xrit</a> <span class="desc">最新 xRIT 文件路径</span></div>
 
     <h2>📊 Web 仪表板</h2>
-    <div class="endpoint"><a href="http://{host}/" target="_blank">/</a> <span class="desc">xrit-rx 仪表板主页</span></div>
+    <div class="endpoint"><a href="http://{host}/" target="_blank">/</a> <span class="desc">xrit-rx {"离线产品查看器" if dash_config.offline else "仪表板主页"}</span></div>
 
     <p style="margin-top: 40px; color: #666; font-size: 13px;">xrit-rx · <a href="https://github.com/lzh173/xrit-rx" style="background: none; padding: 0; color: #e94560; display: inline;">GitHub</a></p>
 </body>
@@ -242,9 +353,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 'output_path': dash_config.output,
                 'images': dash_config.images,
                 'xrit': dash_config.xrit,
-                'interval': int(dash_config.interval)
+                'interval': int(dash_config.interval),
+                'offline': dash_config.offline
             }
-        
+
         elif "/".join(path).startswith(dash_config.output):     # Endpoint starts with demuxer output root path
             path = "/".join(path)
             if (os.path.isfile(path)):
@@ -253,37 +365,113 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         elif path[0] == "current" and len(path) == 2:
             if path[1] == "vcid":
+                vcid = demuxer_instance.currentVCID if demuxer_instance else None
                 content = {
-                    'vcid': demuxer_instance.currentVCID
+                    'vcid': vcid
                 }
 
         elif path[0] == "latest" and len(path) == 2:
             if path[1] == "image":
+                img = demuxer_instance.lastImage if demuxer_instance else None
                 content = {
-                    'image': demuxer_instance.lastImage
+                    'image': img
                 }
             elif path[1] == "fd":
+                img = demuxer_instance.lastImageFD if demuxer_instance else None
                 content = {
-                    'image': demuxer_instance.lastImageFD
+                    'image': img
                 }
             elif path[1] == "add":
+                img = demuxer_instance.lastImageADD if demuxer_instance else None
                 content = {
-                    'image': demuxer_instance.lastImageADD
+                    'image': img
                 }
             elif path[1] == "xrit":
+                xrit = demuxer_instance.lastXRIT if demuxer_instance else None
                 content = {
-                    'xrit': demuxer_instance.lastXRIT
+                    'xrit': xrit
                 }
-        
+
+        elif path[0] == "offline" and dash_config.offline:
+            if len(path) == 2 and path[1] == "dates":
+                content = get_available_dates(dash_config.output)
+            elif len(path) == 3 and path[1] == "date":
+                target_date = path[2]
+                content = self.get_date_products(target_date)
+            elif len(path) == 4 and path[1] == "image":
+                # /api/offline/image/YYYYMMDD/FD or /api/offline/image/YYYYMMDD/FC etc.
+                target_date = path[2]
+                img_type = path[3].upper()
+                base = os.path.join(dash_config.output, "LRIT", target_date)
+                if img_type == "FD":
+                    fd_dir = os.path.join(base, "FD")
+                    if os.path.isdir(fd_dir):
+                        files = sorted([f for f in os.listdir(fd_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                        if files:
+                            content = {"path": os.path.join(fd_dir, files[0])}
+                elif img_type == "FC":
+                    fc_dir = os.path.join(base, "FD", "FC")
+                    if os.path.isdir(fc_dir):
+                        files = sorted([f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                        if files:
+                            content = {"path": os.path.join(fc_dir, files[0])}
+                elif img_type == "IRE":
+                    ire_dir = os.path.join(base, "FD", "IRE")
+                    if os.path.isdir(ire_dir):
+                        files = sorted([f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                        if files:
+                            content = {"path": os.path.join(ire_dir, files[0])}
+                elif img_type == "ADD":
+                    skip_dirs = {'FD', 'ANT', 'LRIT_FILE', 'FC', 'IRE'}
+                    for d in sorted(os.listdir(base)):
+                        if d in skip_dirs: continue
+                        sub = os.path.join(base, d)
+                        if os.path.isdir(sub):
+                            files = sorted([f for f in os.listdir(sub) if f.lower().endswith(('.jpg', '.png'))], reverse=True)
+                            if files:
+                                content = {"path": os.path.join(sub, files[0])}
+                                break
+
         # Send HTTP 200 OK if content has been updated
         if content != b'': status = 200
 
         # Convert Python dict into JSON string
         if type(content) is dict:
-            content = json.dumps(content, sort_keys=False).encode('utf-8')
+            content = json.dumps(content, sort_keys=False, ensure_ascii=False).encode('utf-8')
 
         # Return response bytes, HTTP status code and content MIME type
         return content, status, mime
+
+
+    def get_date_products(self, target_date):
+        """Get all products available for a specific date."""
+        base = os.path.join(dash_config.output, "LRIT", target_date)
+        if not os.path.isdir(base):
+            return {"date": target_date, "products": []}
+
+        products = []
+        skip_dirs = {'LRIT_FILE'}
+        for d in sorted(os.listdir(base)):
+            if d in skip_dirs: continue
+            sub = os.path.join(base, d)
+            if os.path.isdir(sub):
+                item = {"name": d, "type": "directory", "files": []}
+                for f in sorted(os.listdir(sub)):
+                    fpath = os.path.join(sub, f)
+                    if os.path.isfile(fpath) and f.lower().endswith(('.jpg', '.png')):
+                        # Check for FC/IRE subdirectories
+                        info = {"name": f, "path": fpath}
+                        # Check FC
+                        fc_path = os.path.join(sub, "FC", f)
+                        if os.path.isfile(fc_path):
+                            info["fc"] = fc_path
+                        ire_path = os.path.join(sub, "IRE", f)
+                        if os.path.isfile(ire_path):
+                            info["ire"] = ire_path
+                        item["files"].append(info)
+                if item["files"]:
+                    products.append(item)
+        return {"date": target_date, "products": products}
 
 
     def log_message(self, format, *args):

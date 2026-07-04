@@ -50,11 +50,16 @@ port = 1692              # Web 仪表板端口
 ### 运行
 
 ```bash
+# 正常接收模式
 python xrit-rx.py
+
+# 离线浏览模式（仅启动 Web 服务器，浏览已接收的产品）
+python xrit-rx.py -offline
 ```
 
 启动后访问：
 - **仪表板**: `http://<IP>:1692/`
+- **离线产品查看器**（`-offline` 模式）: `http://<IP>:1692/`
 - **API 导航**: `http://<IP>:1692/apilist`
 
 ## 🌐 Web 端点
@@ -109,6 +114,31 @@ received/
 | `tools/lrit-add.py` | 从 LRIT ADD 文件提取数据 |
 | `tools/xrit-decrypt.py` | xRIT 文件 DES 解密 |
 | `tools/keymsg-decrypt.py` | 解密 KMA 加密密钥消息 |
+
+## 🎮 命令行参数
+
+| 参数 | 说明 |
+|------|------|
+| `--config <路径>` | 配置文件路径，默认 `xrit-rx.ini` |
+| `--file <路径>` | 回放 VCDU 数据包文件 |
+| `-v` | 详细控制台输出（调试用） |
+| `--dump <路径>` | 将 VCDU 转储到文件（调试用） |
+| `-offline` | **离线模式**：不连接数据源，仅启动 Web 产品查看器 |
+
+### 离线模式
+
+`-offline` 参数让你无需运行卫星接收链路即可浏览已接收的图片产品：
+
+```bash
+python xrit-rx.py -offline
+```
+
+功能：
+- 扫描 `received/LRIT/YYYYMMDD/` 目录结构，展示所有可用日期
+- 支持浏览 FD 原图、FC 假彩色、IRE 红外增强、ADD 附加数据
+- 日期前后切换导航
+- 自动刷新检测新图片
+- 完整的 `/latest`、`/latest_FDFC`、`/latest_FDIRE`、`/latest_add` API 支持
 
 ## 🔧 自定义
 

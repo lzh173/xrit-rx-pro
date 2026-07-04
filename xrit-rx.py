@@ -68,6 +68,39 @@ def init():
     config = parse_config(args.config)
     print_config()
 
+    # Offline mode: skip all processing, only start web viewer
+    if args.offline:
+        print(Fore.GREEN + Style.BRIGHT + "离线模式：仅启动 Web 产品查看器\n")
+
+        # Resolve output path to absolute
+        offline_output = path.abspath(output)
+
+        if dashe:
+            dash_config = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
+            dash = Dashboard(
+                dash_config(
+                    dashp,
+                    dashi,
+                    spacecraft,
+                    downlink,
+                    offline_output,
+                    output_images,
+                    output_xrit,
+                    blacklist,
+                    ver,
+                    True  # offline=True
+                ),
+                None  # No demuxer in offline mode
+            )
+            print("离线查看器已启动，访问 http://localhost:{}/ 浏览产品\n".format(dashp))
+        else:
+            print(Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启用，请在配置中启用 dashboard")
+            exit()
+
+        # Keep main thread alive (Ctrl+C handled by outer except)
+        while True: sleep(1)
+        return
+
     # Configure directories and input source
     dirs()
     config_input()
@@ -94,7 +127,7 @@ def init():
 
     # Start dashboard server
     if dashe:
-        dash_config = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version')
+        dash_config = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
         dash = Dashboard(
             dash_config(
                 dashp,
@@ -105,7 +138,8 @@ def init():
                 output_images,
                 output_xrit,
                 blacklist,
-                ver
+                ver,
+                False  # offline=False (normal mode)
             ),
             demux
         )
@@ -378,6 +412,7 @@ def parse_args():
     argp.add_argument("--file", action="store", help="VCDU 数据包文件路径", default=None)
     argp.add_argument("-v", action="store_true", help="启用详细控制台输出（仅用于调试）", default=False)
     argp.add_argument("--dump", action="store", help="将 VCDU（填充除外）转储到文件（仅用于调试）", default=None)
+    argp.add_argument("-offline", action="store_true", help="离线模式：仅启动 Web 服务器查看已接收的产品", default=False)
 
     return argp.parse_args()
 
