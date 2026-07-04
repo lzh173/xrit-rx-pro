@@ -438,8 +438,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Send HTTP 200 OK if content has been updated
         if content != b'': status = 200
 
-        # Convert Python dict into JSON string
-        if type(content) is dict:
+        # Convert Python dict/list into JSON string
+        if isinstance(content, (dict, list)):
             content = json.dumps(content, sort_keys=False, ensure_ascii=False).encode('utf-8')
 
         # Return response bytes, HTTP status code and content MIME type
