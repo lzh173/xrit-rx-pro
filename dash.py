@@ -244,6 +244,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if os.path.isfile(self.path):                           # Requested file exists (HTTP 200)
                     self.send_response(200)
                     mime = mimetypes.guess_type(self.path)[0]
+                    # Force UTF-8 charset for HTML files
+                    if mime == "text/html":
+                        mime = "text/html; charset=utf-8"
                     self.send_header('Content-type', mime)
                     self.end_headers()
 
