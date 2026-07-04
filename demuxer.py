@@ -9,6 +9,7 @@ from colorama import Fore, Back, Style
 from time import sleep
 from threading import Thread
 import sys
+import winsound
 
 import ccsds as CCSDS
 import products
@@ -299,6 +300,7 @@ class Channel:
                     print("  " + Fore.WHITE + Back.RED + Style.BRIGHT + "DROPPED {} PACKET{}    (CURRENT: {}   LAST: {}   VCID: {})".format(diff, "S" if diff > 1 else "", vcdu.COUNTER, self.counter, vcdu.VCID))
                 else:
                     print("    " + Fore.WHITE + Back.RED + Style.BRIGHT + "DROPPED {} PACKET{}".format(diff, "S" if diff > 1 else ""))
+                winsound.Beep(600, 200)  # 丢包提示音
         
         self.counter = vcdu.COUNTER
     

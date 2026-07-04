@@ -553,10 +553,11 @@ class xRIT:
 
         # Check output directories exist
         if not os.path.exists("{}/{}".format(root, txDate)): os.mkdir(root + "/" + txDate)
-        if not os.path.exists("{}/{}/{}".format(root, txDate, obMode)): os.mkdir(root + "/" + txDate + "/" + obMode)
+        lrit_dir = "{}/{}/LRIT_FILE".format(root, txDate)
+        if not os.path.exists(lrit_dir):
+            os.mkdir(lrit_dir)
 
-        path = "/{}/{}/".format(txDate, obMode)
-        return root + path + self.FILE_NAME
+        return lrit_dir + "/" + self.FILE_NAME
 
     def save(self, root):
         """
