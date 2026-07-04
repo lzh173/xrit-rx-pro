@@ -80,19 +80,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/": self.path = "index.html"
 
         try:
-            # Serve latest Full Disk image directly (FC preferred)
+            # Serve latest Full Disk original image directly
             if self.path == "/latest":
-                fd_img = demuxer_instance.lastImageFD
-                if fd_img:
-                    fc_dir = os.path.join(os.path.dirname(fd_img), "FC")
-                    if os.path.isdir(fc_dir):
-                        fc_files = [f for f in os.listdir(fc_dir) if f.lower().endswith('.jpg') or f.lower().endswith('.png')]
-                        if fc_files:
-                            fc_files.sort(reverse=True)
-                            fc_path = os.path.join(fc_dir, fc_files[0])
-                            self.serve_latest(fc_path)
-                            return
-                self.serve_latest(fd_img)
+                self.serve_latest(demuxer_instance.lastImageFD)
                 return
 
             # Serve latest Additional Data image directly
@@ -128,6 +118,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                             self.serve_latest(ire_path)
                             return
                 self.serve_latest(None)
+                return
+
+            # Serve API list page
+            if self.path == "/apilist":
+                self.serve_apilist()
                 return
 
             if self.path.startswith("/api/") or self.path == "/api":    # API endpoint requests
@@ -171,7 +166,58 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_response(404)
             self.end_headers()
-    
+
+
+    def serve_apilist(self):
+        """
+        Serve a simple API navigation page
+        """
+
+        host = self.headers.get("Host", "localhost:1692")
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>xrit-rx API 导航</title>
+    <style>
+        body {{ font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 40px; }}
+        h1 {{ color: #e94560; }}
+        h2 {{ color: #f5a623; margin-top: 30px; }}
+        a {{ color: #0f3460; background: #e94560; padding: 8px 20px; border-radius: 6px; text-decoration: none; display: inline-block; margin: 6px 0; font-weight: bold; }}
+        a:hover {{ background: #ff6b7f; }}
+        code {{ background: #16213e; padding: 2px 8px; border-radius: 4px; color: #f5a623; }}
+        .desc {{ color: #aaa; margin-left: 12px; font-size: 14px; }}
+        .endpoint {{ margin: 10px 0; }}
+    </style>
+</head>
+<body>
+    <h1>🌐 xrit-rx API 接口导航</h1>
+
+    <h2>🖼️ 图片直出端点（浏览器直接打开）</h2>
+    <div class="endpoint"><a href="http://{host}/latest" target="_blank">/latest</a> <span class="desc">最新全盘原图（FD）</span></div>
+    <div class="endpoint"><a href="http://{host}/latest_FDFC" target="_blank">/latest_FDFC</a> <span class="desc">最新假彩色（FD/FC）</span></div>
+    <div class="endpoint"><a href="http://{host}/latest_FDIRE" target="_blank">/latest_FDIRE</a> <span class="desc">最新红外增强（FD/IRE）</span></div>
+    <div class="endpoint"><a href="http://{host}/latest_add" target="_blank">/latest_add</a> <span class="desc">最新附加数据图片</span></div>
+
+    <h2>📡 API 接口（返回 JSON）</h2>
+    <div class="endpoint"><a href="http://{host}/api" target="_blank">/api</a> <span class="desc">配置信息</span></div>
+    <div class="endpoint"><a href="http://{host}/api/current/vcid" target="_blank">/api/current/vcid</a> <span class="desc">当前 VCID</span></div>
+    <div class="endpoint"><a href="http://{host}/api/latest/image" target="_blank">/api/latest/image</a> <span class="desc">最新图片路径</span></div>
+    <div class="endpoint"><a href="http://{host}/api/latest/fd" target="_blank">/api/latest/fd</a> <span class="desc">最新 FD 路径</span></div>
+    <div class="endpoint"><a href="http://{host}/api/latest/add" target="_blank">/api/latest/add</a> <span class="desc">最新 ADD 路径</span></div>
+    <div class="endpoint"><a href="http://{host}/api/latest/xrit" target="_blank">/api/latest/xrit</a> <span class="desc">最新 xRIT 文件路径</span></div>
+
+    <h2>📊 Web 仪表板</h2>
+    <div class="endpoint"><a href="http://{host}/" target="_blank">/</a> <span class="desc">xrit-rx 仪表板主页</span></div>
+
+    <p style="margin-top: 40px; color: #666; font-size: 13px;">xrit-rx · <a href="https://github.com/lzh173/xrit-rx" style="background: none; padding: 0; color: #e94560; display: inline;">GitHub</a></p>
+</body>
+</html>"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
+
 
     def handle_api(self, path):
         """

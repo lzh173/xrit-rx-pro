@@ -12,7 +12,6 @@ import io
 import numpy as np
 import os
 import pathlib
-import shutil
 import sys
 from PIL import Image, ImageFile, UnidentifiedImageError
 import subprocess
@@ -358,7 +357,7 @@ class MultiSegmentImage(Product):
         print("    " + Fore.CYAN + Style.BRIGHT + "正在生成假彩色...", end="")
         try:
             subprocess.run(
-                [sanchez, "reproject", "-s", source_path, "stitch", "-fa", "-b", "1.2", "-o", fc_path],
+                [sanchez, "-s", source_path, "-o", fc_path],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120
             )
             if os.path.isfile(fc_path):
@@ -377,39 +376,36 @@ class MultiSegmentImage(Product):
         if not os.path.isfile(script):
             return
 
-        # Build IRE output path: .../FD/IRE/same_filename.jpg
-        ire_dir = os.path.join(os.path.dirname(source_path), "IRE")
-        os.makedirs(ire_dir, exist_ok=True)
-        ire_path = os.path.join(ire_dir, os.path.basename(source_path))
-
-        # Skip if IRE already exists
-        if os.path.isfile(ire_path):
-            print("    IRE 已存在，跳过：\"{}\"".format(ire_path))
-            return
-
         print("    " + Fore.CYAN + Style.BRIGHT + "正在增强红外...", end="")
         try:
-            # Copy source to IRE dir (enhance-ir.py outputs next to input)
-            temp_copy = os.path.join(ire_dir, os.path.basename(source_path))
-            shutil.copy2(source_path, temp_copy)
+            # Use absolute paths
+            abs_source = os.path.abspath(source_path)
+            ire_dir = os.path.join(os.path.dirname(abs_source), "IRE")
+            os.makedirs(ire_dir, exist_ok=True)
+            ire_path = os.path.join(ire_dir, os.path.basename(abs_source))
 
-            # Run enhance-ir on the copy
-            subprocess.run(
-                [sys.executable, script, temp_copy, "-s", "-o"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120
+            # Skip if IRE already exists
+            if os.path.isfile(ire_path):
+                print("    IRE 已存在，跳过：\"{}\"".format(ire_path))
+                return
+
+            # Run enhance-ir directly on FD source, output lands in IRE (cwd)
+            result = subprocess.run(
+                [sys.executable, script, abs_source, "-s", "-o"],
+                cwd=ire_dir,
+                capture_output=True, timeout=120
             )
 
-            # The script creates temp_copy_ENHANCED.jpg → rename to final name
-            enhanced_tmp = temp_copy.replace('.jpg', '_ENHANCED.jpg')
+            # enhance-ir outputs basename_ENHANCED.jpg in cwd (ire_dir) → rename to final name
+            enhanced_tmp = os.path.join(ire_dir, os.path.splitext(os.path.basename(abs_source))[0] + '_ENHANCED.jpg')
             if os.path.isfile(enhanced_tmp):
                 os.rename(enhanced_tmp, ire_path)
                 print(Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(ire_path))
             else:
-                print(Fore.WHITE + Back.RED + Style.BRIGHT + "红外增强失败")
-
-            # Clean up temp copy
-            if os.path.isfile(temp_copy):
-                os.remove(temp_copy)
+                err = result.stderr.decode('utf-8', errors='ignore')[-200:]
+                print(Fore.WHITE + Back.RED + Style.BRIGHT + "失败")
+                if err:
+                    print("    " + err.replace("\n", "\n    "))
         except Exception as e:
             print(Fore.WHITE + Back.RED + Style.BRIGHT + "错误：{}".format(e))
 
