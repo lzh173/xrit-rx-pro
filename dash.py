@@ -171,7 +171,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         # Offline mode root: serve product viewer
         if self.path == "/" and dash_config.offline:
-            self.path = "html/offline-viewer.html"
+            self.path = "offline-viewer.html"
         elif self.path == "/":
             self.path = "index.html"
 
