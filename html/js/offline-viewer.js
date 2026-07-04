@@ -197,7 +197,7 @@ function renderViewer(data)
     // Main image
     var imgSrc = getCurrentImageUrl();
     html += '    <div class="main-image-wrap">';
-    html += '      <img id="main-img" src="' + imgSrc + '" alt="image" onerror="handleImgError()" onload="this.style.opacity=\'1\'">';';
+    html += '      <img id="main-img" src="' + imgSrc + '" alt="image" onerror="handleImgError()" onload="this.style.opacity=\'1\'">';
     html += '      <div class="img-error" id="img-error">图片加载失败</div>';
     html += '    </div>';
 
