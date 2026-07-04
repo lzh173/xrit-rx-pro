@@ -553,6 +553,10 @@ function loadDateProducts(date)
         if (res.status == 200) {
             res.json().then((data) => {
                 renderProducts(data);
+                // After re-render, restore user's selected image type if available
+                if (currentType != 'FD' && imageCache[currentType]) {
+                    switchImage(currentType);
+                }
             });
         }
         else {
@@ -777,6 +781,9 @@ function refreshLatest()
                                     if (oldFD != newFD) {
                                         print("检测到新图片：" + getFileName('FD'), "VIEWER");
                                         switchImage('FD');
+                                    } else if (currentType != 'FD' && imageCache[currentType]) {
+                                        // Restore user's selected image type
+                                        switchImage(currentType);
                                     }
                                 });
                             }
