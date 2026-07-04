@@ -51,13 +51,6 @@ function configure()
     heading.innerHTML += `<span>xrit-rx <a href="https://github.com/lzh173/xrit-rx" target="_blank">v${config.version}</a></span>`;
     document.title = `${config.spacecraft} ${config.downlink} - xrit-rx 离线查看器`;
 
-    setInterval(() => { block_time(); }, 100);
-    block_time();
-
-    // Set time block heading
-    var timeHeading = document.querySelector('#block-time .block-heading');
-    if (timeHeading) timeHeading.textContent = '时间';
-
     loadDates();
 }
 
@@ -153,6 +146,7 @@ function renderViewer(data)
     html += '  <button class="nav-btn" id="btn-prev" onclick="navigateDate(-1)">◀</button>';
     html += '  <span class="date-label" id="date-label">' + formatDate(currentDate) + '</span>';
     html += '  <button class="nav-btn" id="btn-next" onclick="navigateDate(1)">▶</button>';
+    html += '  <span style="color:#666;font-size:13px;margin-left:8px;">（所有时间为UTC时间）</span>';
     html += '</div>';
 
     // ——— Split ———
@@ -203,7 +197,7 @@ function renderViewer(data)
     // Main image
     var imgSrc = getCurrentImageUrl();
     html += '    <div class="main-image-wrap">';
-    html += '      <img id="main-img" src="' + imgSrc + '" alt="image" onerror="handleImgError()">';
+    html += '      <img id="main-img" src="' + imgSrc + '" alt="image" onerror="handleImgError()" onload="this.style.opacity=\'1\'">';';
     html += '      <div class="img-error" id="img-error">图片加载失败</div>';
     html += '    </div>';
 
@@ -264,6 +258,8 @@ function switchType(type)
     if (img) {
         img.style.display = 'block';
         if (errDiv) errDiv.style.display = 'none';
+        // Show loading indicator
+        img.style.opacity = '0.3';
         img.src = getCurrentImageUrl();
         document.getElementById("info-link").href = img.src;
     }
@@ -425,14 +421,3 @@ function showEmpty(msg)
 }
 
 
-/* ——————————— Time block ——————————— */
-function block_time()
-{
-    var block = document.getElementById("block-time");
-    if (!block) return;
-    var els = block.children[1].children;
-    if (els && els.length >= 2) {
-        els[0].innerHTML = get_time_local() + '<br><span title="UTC ' + get_time_utc_offset() + '">本地</span>';
-        els[1].innerHTML = get_time_utc() + '<br><span>UTC</span>';
-    }
-}
