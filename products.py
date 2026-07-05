@@ -117,7 +117,7 @@ class Product:
         # Build file output path (root + date + observation mode)
         root = self.config.output
         date = "{2}{1}{0}".format(*self.name.date)
-        path = "{}{}/{}/".format(root, date, self.name.mode)
+        path = "{}/{}/{}".format(root, date, self.name.mode) + "/"
 
         # Check output directories exist
         pathlib.Path(path).mkdir(parents=True, exist_ok=True)
