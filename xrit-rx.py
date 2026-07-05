@@ -91,6 +91,7 @@ def init():
     global output
     global demux
     global dash
+    global sck
     global switch_to_offline
 
     # Initialise Colorama
