@@ -97,9 +97,38 @@ def init():
             print(Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启用，请在配置中启用 dashboard")
             exit()
 
-        # Keep main thread alive (Ctrl+C handled by outer except)
-        while True: sleep(1)
-        return
+        # Console REPL — type "rx" to switch to receive mode
+        print(Fore.YELLOW + Style.BRIGHT + "输入 rx 切换到接收模式，输入 exit 退出\n")
+
+        need_receive = False
+        while True:
+            try:
+                cmd = input("(offline) ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+
+            if cmd in ("rx", "receive", "start"):
+                need_receive = True
+                break
+            elif cmd in ("exit", "quit", "q"):
+                break
+            elif cmd in ("help", "?"):
+                print("  rx, start  - 切换到正常接收模式")
+                print("  exit, quit - 退出程序")
+                print("  help       - 显示此帮助")
+            else:
+                print("未知命令，输入 help 查看帮助")
+
+        # Stop offline dashboard
+        if dash:
+            dash.stop()
+
+        if not need_receive:
+            return
+
+        # Fall through to normal receive mode init
+        print(Fore.GREEN + Style.BRIGHT + "\n正在切换至接收模式...\n")
 
     # Configure directories and input source
     dirs()
