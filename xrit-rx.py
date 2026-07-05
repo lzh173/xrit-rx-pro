@@ -30,7 +30,8 @@ stime = None            # Processing start time
 source = None           # Input source type
 spacecraft = None       # Spacecraft name
 downlink = None         # Downlink type (LRIT/HRIT)
-output = None           # Output path root
+output = None           # Output path root (never modified from config value)
+output_base = None      # Original output path from config, preserved for mode switching
 output_images = None    # Flag for saving Images to disk
 output_xrit = None      # Flag for saving xRIT files to disk
 blacklist = []          # VCID blacklist
@@ -45,6 +46,7 @@ dashe = None            # Dashboard enabled flag
 dashp = None            # Dashboard HTTP port
 dashi = None            # Dashboard refresh interval (sec)
 ver = "2.0.0"           # xrit-rx version
+listener_active = False # Console listener should read stdin
 switch_to_offline = False  # Flag set by console listener to switch modes
 console_thread = None      # Background stdin listener
 
@@ -54,9 +56,16 @@ def start_console_listener():
     Start a background daemon thread that reads stdin for mode switch commands.
     """
     global console_thread
+    global listener_active
+
+    listener_active = True
 
     def _listener():
+        global switch_to_offline
         while True:
+            if not listener_active:
+                sleep(0.2)
+                continue
             try:
                 cmd = sys.stdin.readline().strip().lower()
             except (EOFError, OSError):
@@ -66,7 +75,6 @@ def start_console_listener():
                 sleep(0.1)
                 continue
             if cmd == "offline":
-                global switch_to_offline
                 switch_to_offline = True
                 print(Fore.YELLOW + Style.BRIGHT + "\n正在等待当前数据处理完毕，切换至离线模式...\n")
             elif cmd in ("exit", "quit"):
@@ -92,6 +100,8 @@ def init():
     global demux
     global dash
     global sck
+    global output_base
+    global listener_active
     global switch_to_offline
 
     # Initialise Colorama
@@ -102,7 +112,10 @@ def init():
     config = parse_config(args.config)
     print_config()
 
-    # Start background console listener (reads stdin for mode switching)
+    # Save original output path for mode switching (normal mode modifies it)
+    output_base = path.abspath(output).replace("\\", "/")
+
+    # Start background console listener (reads stdin for "offline" command)
     start_console_listener()
 
     # Mode state machine: "offline" ↔ "normal"
@@ -113,18 +126,19 @@ def init():
             # ── Offline mode ──
             print(Fore.GREEN + Style.BRIGHT + "离线模式：仅启动 Web 产品查看器\n")
 
-            offline_output = path.abspath(output).replace("\\", "/")
-
             if dashe:
                 cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
                 dash = Dashboard(
-                    cfg(dashp, dashi, spacecraft, downlink, offline_output, output_images, output_xrit, blacklist, ver, True),
+                    cfg(dashp, dashi, spacecraft, downlink, output_base, output_images, output_xrit, blacklist, ver, True),
                     None
                 )
                 print("离线查看器已启动，访问 http://localhost:{}/ 浏览产品\n".format(dashp))
             else:
                 print(Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启用，请在配置中启用 dashboard")
                 exit()
+
+            # Pause background listener to avoid stdin conflict with input()
+            listener_active = False
 
             print(Fore.YELLOW + Style.BRIGHT + "输入 rx 切换到接收模式，输入 exit 退出\n")
 
@@ -149,6 +163,9 @@ def init():
                 else:
                     print("未知命令，输入 help 查看帮助")
 
+            # Re-enable background listener
+            listener_active = True
+
             if dash:
                 dash.stop()
 
@@ -165,13 +182,15 @@ def init():
             config_input()
             load_keys()
 
+            # Use a local path; don't modify global output (needed for mode switching)
+            output_path = path.abspath(output_base + "/" + downlink + "/").replace("\\", "/")
+
             demux_config = namedtuple('demux_config', 'spacecraft downlink verbose dump output images xrit blacklist keys')
-            output += "/" + downlink + "/"
-            demux = Demuxer(demux_config(spacecraft, downlink, args.v, args.dump, output, output_images, output_xrit, blacklist, keys))
+            demux = Demuxer(demux_config(spacecraft, downlink, args.v, args.dump, output_path, output_images, output_xrit, blacklist, keys))
 
             if dashe:
                 cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
-                dash = Dashboard(cfg(dashp, dashi, spacecraft, downlink, output, output_images, output_xrit, blacklist, ver, False), demux)
+                dash = Dashboard(cfg(dashp, dashi, spacecraft, downlink, output_path, output_images, output_xrit, blacklist, ver, False), demux)
 
             if not demux.coreReady:
                 print(Fore.WHITE + Back.RED + Style.BRIGHT + "解复用器核心线程启动失败")
