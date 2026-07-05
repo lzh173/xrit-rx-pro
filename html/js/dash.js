@@ -531,7 +531,7 @@ function configure()
     // Set heading and window title
     var heading = document.getElementById("dash-heading");
     heading.innerHTML =  `${config.spacecraft} ${config.downlink} 仪表板`;
-    heading.innerHTML += `<span>xrit-rx <a href="https://github.com/lzh173/xrit-rx/releases/tag/v${config.version}" target="_blank" title="在 GitHub 上查看发布说明">v${config.version}</a></span>`;
+    heading.innerHTML += `<span><a href="/viewer" target="_blank" style="color:#f5a623;margin-right:12px;" title="打开产品查看器">📂 浏览产品</a> xrit-rx <a href="https://github.com/lzh173/xrit-rx/releases/tag/v${config.version}" target="_blank" title="在 GitHub 上查看发布说明">v${config.version}</a></span>`;
     document.title = `${config.spacecraft} ${config.downlink} - xrit-rx v${config.version}`;
 
     // Build blocks

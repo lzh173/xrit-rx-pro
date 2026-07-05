@@ -48,7 +48,8 @@ function configure()
 
     var heading = document.getElementById("dash-heading");
     heading.innerHTML = `${config.spacecraft} ${config.downlink} 离线产品查看器`;
-    heading.innerHTML += `<span>xrit-rx <a href="https://github.com/lzh173/xrit-rx" target="_blank">v${config.version}</a></span>`;
+    var backLink = config.offline ? '' : '<a href="/" style="color:#f5a623;margin-right:12px;">← 返回仪表板</a> ';
+    heading.innerHTML += `<span>${backLink}xrit-rx <a href="https://github.com/lzh173/xrit-rx" target="_blank">v${config.version}</a></span>`;
     document.title = `${config.spacecraft} ${config.downlink} - xrit-rx 离线查看器`;
 
     loadDates();

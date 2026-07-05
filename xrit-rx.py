@@ -13,8 +13,6 @@ from colorama import Fore, Back, Style
 from configparser import ConfigParser, NoOptionError, NoSectionError
 from os import mkdir, path
 import socket
-import sys
-import threading
 from time import time, sleep
 import winsound
 
@@ -30,8 +28,7 @@ stime = None            # Processing start time
 source = None           # Input source type
 spacecraft = None       # Spacecraft name
 downlink = None         # Downlink type (LRIT/HRIT)
-output = None           # Output path root (never modified from config value)
-output_base = None      # Original output path from config, preserved for mode switching
+output = None           # Output path root
 output_images = None    # Flag for saving Images to disk
 output_xrit = None      # Flag for saving xRIT files to disk
 blacklist = []          # VCID blacklist
@@ -46,43 +43,6 @@ dashe = None            # Dashboard enabled flag
 dashp = None            # Dashboard HTTP port
 dashi = None            # Dashboard refresh interval (sec)
 ver = "2.0.0"           # xrit-rx version
-listener_active = False # Console listener should read stdin
-switch_to_offline = False  # Flag set by console listener to switch modes
-console_thread = None      # Background stdin listener
-
-
-def start_console_listener():
-    """
-    Start a background daemon thread that reads stdin for mode switch commands.
-    """
-    global console_thread
-    global listener_active
-
-    listener_active = True
-
-    def _listener():
-        global switch_to_offline
-        while True:
-            if not listener_active:
-                sleep(0.2)
-                continue
-            try:
-                cmd = sys.stdin.readline().strip().lower()
-            except (EOFError, OSError):
-                sleep(0.5)
-                continue
-            if not cmd:
-                sleep(0.1)
-                continue
-            if cmd == "offline":
-                switch_to_offline = True
-                print(Fore.YELLOW + Style.BRIGHT + "\n正在等待当前数据处理完毕，切换至离线模式...\n")
-            elif cmd in ("exit", "quit"):
-                safe_stop()
-
-    t = threading.Thread(target=_listener, daemon=True, name="console-listener")
-    t.start()
-    console_thread = t
 
 
 def init():
@@ -92,17 +52,13 @@ def init():
     print("├──────────────────────────────────────────────┤")
     print("│     @sam210723         vksdr.com/xrit-rx     │")
     print("└──────────────────────────────────────────────┘\n")
-    
+
     global args
     global config
     global stime
     global output
     global demux
     global dash
-    global sck
-    global output_base
-    global listener_active
-    global switch_to_offline
 
     # Initialise Colorama
     colorama.init(autoreset=True)
@@ -112,115 +68,83 @@ def init():
     config = parse_config(args.config)
     print_config()
 
-    # Save original output path for mode switching (normal mode modifies it)
-    output_base = path.abspath(output).replace("\\", "/")
+    # Offline mode: only start web product viewer
+    if args.offline:
+        offline_output = path.abspath(output).replace("\\", "/")
 
-    # Start background console listener (reads stdin for "offline" command)
-    start_console_listener()
+        if dashe:
+            cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
+            dash = Dashboard(
+                cfg(dashp, dashi, spacecraft, downlink, offline_output, output_images, output_xrit, blacklist, ver, True),
+                None
+            )
+            print("离线查看器已启动，访问 http://localhost:{}/ 浏览产品\n".format(dashp))
+        else:
+            print(Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启用，请在配置中启用 dashboard")
+            exit()
 
-    # Mode state machine: "offline" ↔ "normal"
-    current_mode = "offline" if args.offline else "normal"
+        print(Fore.YELLOW + Style.BRIGHT + "输入 exit 退出\n")
 
-    while True:
-        if current_mode == "offline":
-            # ── Offline mode ──
-            print(Fore.GREEN + Style.BRIGHT + "离线模式：仅启动 Web 产品查看器\n")
+        while True:
+            try:
+                cmd = input("(offline) ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
 
-            if dashe:
-                cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
-                dash = Dashboard(
-                    cfg(dashp, dashi, spacecraft, downlink, output_base, output_images, output_xrit, blacklist, ver, True),
-                    None
-                )
-                print("离线查看器已启动，访问 http://localhost:{}/ 浏览产品\n".format(dashp))
+            if cmd in ("exit", "quit", "q"):
+                break
+            elif cmd in ("help", "?"):
+                print("  exit, quit  - 退出程序")
+                print("  help        - 显示此帮助")
             else:
-                print(Fore.WHITE + Back.RED + Style.BRIGHT + "仪表板未启用，请在配置中启用 dashboard")
-                exit()
+                print("未知命令，输入 help 查看帮助")
 
-            # Pause background listener to avoid stdin conflict with input()
-            listener_active = False
+        safe_stop()
+        return
 
-            print(Fore.YELLOW + Style.BRIGHT + "输入 rx 切换到接收模式，输入 exit 退出\n")
+    # Normal receive mode
+    dirs()
+    config_input()
+    load_keys()
 
-            need_receive = False
-            while True:
-                try:
-                    cmd = input("(offline) ").strip().lower()
-                except (EOFError, KeyboardInterrupt):
-                    print()
-                    break
+    # Create demuxer instance
+    demux_config = namedtuple('demux_config', 'spacecraft downlink verbose dump output images xrit blacklist keys')
+    output += "/" + downlink + "/"
+    demux = Demuxer(
+        demux_config(
+            spacecraft,
+            downlink,
+            args.v,
+            args.dump,
+            output,
+            output_images,
+            output_xrit,
+            blacklist,
+            keys
+        )
+    )
 
-                if cmd in ("rx", "receive", "start"):
-                    need_receive = True
-                    break
-                elif cmd in ("exit", "quit", "q"):
-                    break
-                elif cmd in ("help", "?"):
-                    print("  rx, start   - 切换到正常接收模式")
-                    print("  offline     - 切换到离线浏览（在接收模式下输入）")
-                    print("  exit, quit  - 退出程序")
-                    print("  help        - 显示此帮助")
-                else:
-                    print("未知命令，输入 help 查看帮助")
+    # Start dashboard server
+    if dashe:
+        cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
+        dash = Dashboard(
+            cfg(dashp, dashi, spacecraft, downlink, output, output_images, output_xrit, blacklist, ver, False),
+            demux
+        )
 
-            # Re-enable background listener
-            listener_active = True
+    # Check demuxer thread is ready
+    if not demux.coreReady:
+        print(Fore.WHITE + Back.RED + Style.BRIGHT + "解复用器核心线程启动失败")
+        exit()
 
-            if dash:
-                dash.stop()
+    print("──────────────────────────────────────────────────────────────────────────────────\n")
 
-            if not need_receive:
-                return
+    # Get processing start time
+    stime = time()
 
-            print(Fore.GREEN + Style.BRIGHT + "\n正在切换至接收模式...\n")
-            current_mode = "normal"
-            continue  # re-enter loop as normal mode
-
-        elif current_mode == "normal":
-            # ── Normal receive mode ──
-            dirs()
-            config_input()
-            load_keys()
-
-            # Use a local path; don't modify global output (needed for mode switching)
-            output_path = path.abspath(output_base + "/" + downlink + "/").replace("\\", "/")
-
-            demux_config = namedtuple('demux_config', 'spacecraft downlink verbose dump output images xrit blacklist keys')
-            demux = Demuxer(demux_config(spacecraft, downlink, args.v, args.dump, output_path, output_images, output_xrit, blacklist, keys))
-
-            if dashe:
-                cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
-                dash = Dashboard(cfg(dashp, dashi, spacecraft, downlink, output_path, output_images, output_xrit, blacklist, ver, False), demux)
-
-            if not demux.coreReady:
-                print(Fore.WHITE + Back.RED + Style.BRIGHT + "解复用器核心线程启动失败")
-                exit()
-
-            print("──────────────────────────────────────────────────────────────────────────────────\n")
-            stime = time()
-            loop()  # blocks until switch_to_offline or source complete
-
-            # Clean up normal mode resources
-            if demux:
-                demux.stop()
-                demux = None
-            if dash:
-                dash.stop()
-                dash = None
-            if sck:
-                try: sck.close()
-                except: pass
-                sck = None
-
-            # loop() returned — check why
-            if switch_to_offline:
-                switch_to_offline = False
-                print(Fore.GREEN + Style.BRIGHT + "\n正在切换至离线浏览模式...\n")
-                current_mode = "offline"
-                continue
-            else:
-                # FILE mode completed normally
-                return
+    # Enter main loop
+    loop()
 
 
 def loop():
@@ -231,34 +155,16 @@ def loop():
     global source
     global sck
     global buflen
-    global switch_to_offline
-
-    # Set socket timeout for TCP/UDP sources so we can check switch_to_offline
-    if source in ("GOESRECV", "OSP", "UDP") and sck:
-        try:
-            sck.settimeout(0.5)
-        except:
-            pass
 
     while True:
-        # Check for mode switch request
-        if switch_to_offline:
-            print(Fore.YELLOW + Style.BRIGHT + "\n正在停止接收...")
-            return
-
         if source == "GOESRECV":
             try:
                 data = sck.recv(buflen + 8)
-            except socket.timeout:
-                continue
             except ConnectionResetError:
                 print(Fore.WHITE + Back.RED + Style.BRIGHT + "丢失与 GOESRECV 的连接，正在重连...")
                 winsound.Beep(800, 500)
                 sleep(3)
                 reconnect_source()
-                continue
-            except:
-                continue
 
             if len(data) == buflen + 8:
                 demux.push(data[8:])
@@ -266,28 +172,20 @@ def loop():
         elif source == "OSP":
             try:
                 data = sck.recv(buflen)
-            except socket.timeout:
-                continue
             except ConnectionResetError:
                 print(Fore.WHITE + Back.RED + Style.BRIGHT + "丢失与 Open Satellite Project 的连接，正在重连...")
                 winsound.Beep(800, 500)
                 sleep(3)
                 reconnect_source()
-                continue
-            except:
-                continue
 
             demux.push(data)
 
         elif source == "UDP":
             try:
                 data, address = sck.recvfrom(buflen)
-            except socket.timeout:
-                continue
             except Exception as e:
                 print(e)
                 safe_stop()
-                return
 
             demux.push(data)
 
@@ -316,7 +214,7 @@ def loop():
                 if demux.complete():
                     runTime = round(time() - stime, 3)
                     print("\n文件处理完成（{} 秒）".format(runTime))
-                    return  # Don't safe_stop, let init decide
+                    safe_stop()
                 else:
                     # Limit loop speed when waiting for demuxer to finish processing
                     sleep(0.5)
@@ -340,7 +238,7 @@ def config_input():
         print("正在连接 goesrecv（{}）...".format(ip), end='')
         connect_socket(addr)
         nanomsg_init()
-    
+
     elif source == "OSP":
         sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -350,14 +248,14 @@ def config_input():
 
         print("正在连接 Open Satellite Project（{}）...".format(ip), end='')
         connect_socket(addr)
-    
+
     elif source == "UDP":
         sck = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         ip = config.get('udp', 'ip')
         port = int(config.get('udp', 'vchan'))
         addr = (ip, port)
-        
+
         print("正在绑定 UDP 套接字（{}:{}）...".format(ip, port), end='')
         try:
             sck.bind(addr)
@@ -396,7 +294,7 @@ def connect_socket(addr):
             print(Fore.WHITE + Back.RED + Style.BRIGHT + "连接被拒绝")
         else:
             print(e)
-    
+
         safe_stop()
 
 
@@ -425,7 +323,7 @@ def dirs():
     global output
 
     absp = path.abspath(output)
-    
+
     # Create output directory if it doesn't exist already
     if not path.isdir(absp):
         try:
@@ -433,7 +331,7 @@ def dirs():
         except OSError as e:
             print(Fore.WHITE + Back.RED + Style.BRIGHT + "ERROR CREATING OUTPUT FOLDERS\n{}".format(e))
             safe_stop()
-    
+
     if not path.isdir(absp + "/" + downlink + "/"):
         try:
             mkdir(absp + "/" + downlink + "/")
@@ -457,11 +355,11 @@ def load_keys():
     # Check key file exists
     if not path.exists(keypath):
         print(Fore.WHITE + Back.RED + Style.BRIGHT + "未找到密钥文件：仅保存加密的 xRIT 文件")
-        
+
         # Only output xRIT files
         output_images = False
         output_xrit = True
-        
+
         return False
 
     # Load key file
@@ -495,7 +393,7 @@ def parse_args():
     """
     Parses command line arguments
     """
-    
+
     argp = ArgumentParser()
     argp.description = "CCSDS 解复用器前端"
     argp.add_argument("--config", action="store", help="配置文件路径 (.ini)", default="xrit-rx.ini")
@@ -531,7 +429,7 @@ def parse_config(path):
         source = cfgp.get('rx', 'input').upper()
     else:
         source = "FILE"
-    
+
     try:
         spacecraft = cfgp.get('rx', 'spacecraft').upper()
         downlink = cfgp.get('rx', 'mode').upper()

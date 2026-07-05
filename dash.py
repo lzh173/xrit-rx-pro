@@ -88,6 +88,20 @@ def scan_latest_add(output_path):
     return None
 
 
+def _viewer_base():
+    """
+    Get the correct base path for product scanning.
+    Normal mode appends /LRIT/ to output, but scanning already expects LRIT subdirectory.
+    """
+    base = dash_config.output
+    # If path ends with a downlink directory name (e.g. /LRIT/), strip it
+    for suffix in ["/LRIT/", "/HRIT/"]:
+        if base.endswith(suffix):
+            base = base[:-len(suffix)]
+            break
+    return base
+
+
 def get_available_dates(output_path):
     """Get list of available date directories with product counts."""
     base = os.path.join(output_path, "LRIT")
@@ -175,8 +189,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         Respond to GET requests
         """
 
+        # /viewer: product viewer (in both offline and normal mode)
+        if self.path == "/viewer":
+            self.path = "offline-viewer.html"
+
         # Offline mode root: serve product viewer
-        if self.path == "/" and dash_config.offline:
+        elif self.path == "/" and dash_config.offline:
             self.path = "offline-viewer.html"
         elif self.path == "/":
             self.path = "index.html"
@@ -401,17 +419,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     'xrit': xrit
                 }
 
-        elif path[0] == "offline" and dash_config.offline:
+        elif path[0] == "offline":
+            # Works in both offline and normal mode (when /viewer is active)
+            viewer_base = _viewer_base()
             if len(path) == 2 and path[1] == "dates":
-                content = get_available_dates(dash_config.output)
+                content = get_available_dates(viewer_base)
             elif len(path) == 3 and path[1] == "date":
                 target_date = path[2]
                 content = self.get_date_products(target_date)
             elif len(path) == 4 and path[1] == "image":
-                # /api/offline/image/YYYYMMDD/FD or /api/offline/image/YYYYMMDD/FC etc.
                 target_date = path[2]
                 img_type = path[3].upper()
-                base = os.path.join(dash_config.output, "LRIT", target_date)
+                base = os.path.join(viewer_base, "LRIT", target_date)
                 if img_type == "FD":
                     fd_dir = os.path.join(base, "FD")
                     if os.path.isdir(fd_dir):
@@ -454,7 +473,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def get_date_products(self, target_date):
         """Get all products available for a specific date."""
-        base = os.path.join(dash_config.output, "LRIT", target_date)
+        base = os.path.join(_viewer_base(), "LRIT", target_date)
         if not os.path.isdir(base):
             return {"date": target_date, "products": []}
 
