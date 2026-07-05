@@ -70,6 +70,7 @@ def init():
 
     # Offline mode: only start web product viewer
     if args.offline:
+        # Use the raw config output path directly (scan functions append /LRIT/ internally)
         offline_output = path.abspath(output).replace("\\", "/")
 
         if dashe:
@@ -105,19 +106,22 @@ def init():
 
     # Normal receive mode
     dirs()
+
+    # Build full output path WITHOUT modifying global output
+    output_path = path.abspath(output + "/" + downlink + "/").replace("\\", "/")
+
     config_input()
     load_keys()
 
-    # Create demuxer instance
+    # Create demuxer instance (uses output_path including /LRIT/)
     demux_config = namedtuple('demux_config', 'spacecraft downlink verbose dump output images xrit blacklist keys')
-    output += "/" + downlink + "/"
     demux = Demuxer(
         demux_config(
             spacecraft,
             downlink,
             args.v,
             args.dump,
-            output,
+            output_path,
             output_images,
             output_xrit,
             blacklist,
@@ -125,11 +129,11 @@ def init():
         )
     )
 
-    # Start dashboard server
+    # Start dashboard server — pass original output (scan functions append LRIT themselves)
     if dashe:
         cfg = namedtuple('dash_config', 'port interval spacecraft downlink output images xrit blacklist version offline')
         dash = Dashboard(
-            cfg(dashp, dashi, spacecraft, downlink, output, output_images, output_xrit, blacklist, ver, False),
+            cfg(dashp, dashi, spacecraft, downlink, path.abspath(output).replace("\\", "/"), output_images, output_xrit, blacklist, ver, False),
             demux
         )
 
