@@ -14,7 +14,8 @@ var currentType = 'FD';      // 'FD' | 'FC' | 'IRE' | (product name for non-FD)
 var allProducts = [];        // Raw products array for current date
 var refreshTimer = null;
 var isViewingLatest = true;
-var pollInterval = 30;
+var pollInterval = 8;   // seconds between polls
+var pollIntervalOffline = 30;
 
 var typeLabels = {
     'FD': '原图',
@@ -231,7 +232,8 @@ function renderViewer(data)
     // Schedule next refresh if on latest date
     cancelRefresh();
     if (isViewingLatest) {
-        refreshTimer = setTimeout(refreshLatest, pollInterval * 1000);
+        var interval = (config.offline ? pollIntervalOffline : pollInterval) * 1000;
+        refreshTimer = setTimeout(refreshLatest, interval);
     }
 }
 
@@ -412,7 +414,8 @@ function refreshLatest()
                     }
                 }
 
-                refreshTimer = setTimeout(refreshLatest, pollInterval * 1000);
+                var interval = (config.offline ? pollIntervalOffline : pollInterval) * 1000;
+                refreshTimer = setTimeout(refreshLatest, interval);
             });
         }
     });
