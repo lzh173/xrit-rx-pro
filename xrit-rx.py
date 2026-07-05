@@ -42,7 +42,7 @@ dash = None             # Dashboard class object
 dashe = None            # Dashboard enabled flag
 dashp = None            # Dashboard HTTP port
 dashi = None            # Dashboard refresh interval (sec)
-ver = "2.0.0"           # xrit-rx version
+ver = "2.0.1"           # xrit-rx version
 
 
 def init():
