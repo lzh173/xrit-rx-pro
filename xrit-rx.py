@@ -444,8 +444,8 @@ def parse_config(path):
         keypath = cfgp.get('rx', 'keys')
         dashe = cfgp.getboolean('dashboard', 'enabled')
         dashp = cfgp.get('dashboard', 'port')
-        dashi = round((float(cfgp.get('dashboard', 'interval'))), 1)
-    except (NoSectionError, NoOptionError) as e:
+        dashi = round(float(cfgp.get('dashboard', 'interval', fallback='1')), 1)
+    except (ValueError, NoSectionError, NoOptionError) as e:
         print(Fore.WHITE + Back.RED + Style.BRIGHT + "解析配置文件错误：" + str(e).upper())
         safe_stop()
 
