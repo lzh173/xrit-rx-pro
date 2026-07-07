@@ -184,7 +184,7 @@ function get_schedule()
             res.json().then((data) => {
                 // Filter out EGMSG (emergency messages, rarely transmitted)
                 sch = data.filter(function(e) { return e[2] !== 'EGMSG'; });
-                print("已加载（{} 条记录）".format(sch.length), "SCHD");
+                print("已加载（" + sch.length + " 条记录）", "SCHD");
             });
         }
         else {
