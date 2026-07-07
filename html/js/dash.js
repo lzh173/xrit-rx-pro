@@ -182,7 +182,8 @@ function get_schedule()
     http_get("/api/schedule", (res) => {
         if (res.status == 200) {
             res.json().then((data) => {
-                sch = data;
+                // Filter out EGMSG (emergency messages, rarely transmitted)
+                sch = data.filter(function(e) { return e[2] !== 'EGMSG'; });
                 print("已加载（{} 条记录）".format(sch.length), "SCHD");
             });
         }
