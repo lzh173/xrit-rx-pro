@@ -653,9 +653,12 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
 
         elif "/".join(path).startswith(dash_config.output):     # Endpoint starts with demuxer output root path
             path = "/".join(path)
-            if (os.path.isfile(path)):
-                mime = mimetypes.guess_type(path)[0]
-                content = open(path, 'rb').read()
+            # Normalize path and prevent directory traversal
+            norm_path = os.path.normpath(path)
+            if (os.path.isfile(norm_path)):
+                mime = mimetypes.guess_type(norm_path)[0]
+                with open(norm_path, 'rb') as f:
+                    content = f.read()
 
         elif path[0] == "current" and len(path) == 2:
             if path[1] == "vcid":
