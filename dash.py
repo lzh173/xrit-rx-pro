@@ -327,9 +327,7 @@ class Dashboard:
             print("产品查看器 HTTP 服务器已启动（端口 {}）".format(dash_config.port))
 
         # Start HTTP server thread
-        self.httpd_thread = Thread()
-        self.httpd_thread.name = "HTTP SERVER"
-        self.httpd_thread.run = self.http_server
+        self.httpd_thread = Thread(target=self.http_server, name="HTTP SERVER")
         self.httpd_thread.start()
 
 

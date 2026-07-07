@@ -43,9 +43,7 @@ class Demuxer:
             self.coreWait = 1           # Core loop delay in ms for HRIT (2.2ms per packet @ 3 Mbps)
 
         # Start core demuxer thread
-        demux_thread = Thread()
-        demux_thread.name = "DEMUX CORE"
-        demux_thread.run = self.demux_core
+        demux_thread = Thread(target=self.demux_core, name="DEMUX CORE")
         demux_thread.start()
 
     def demux_core(self):
