@@ -286,7 +286,7 @@ class MultiSegmentImage(Product):
         # Check object for current channel exists
         try:
             self.images[chan]
-        except:
+        except KeyError:
             self.images[chan] = {}
 
         # Get file name
@@ -413,7 +413,7 @@ class MultiSegmentImage(Product):
 
         try:
             return res[self.config.spacecraft][self.config.downlink][self.name.mode][channel]
-        except:
+        except (KeyError, TypeError):
             return (None, None)
 
     def progress(self):

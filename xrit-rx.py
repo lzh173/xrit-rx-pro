@@ -534,7 +534,7 @@ def reconnect_source():
             # Close old socket
             try:
                 sck.close()
-            except:
+            except Exception:
                 pass
 
             if source == "GOESRECV":
