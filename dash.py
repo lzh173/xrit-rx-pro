@@ -7,7 +7,6 @@ Dashboard HTTP server
 
 from colorama import Fore, Back, Style
 import http.server
-import io
 import json
 import mimetypes
 import os
@@ -829,8 +828,11 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
 
     def log_message(self, format, *args):
         """
-        Silence HTTP server log messages
+        Log HTTP requests (status, path) for non-200 responses
         """
 
-        #super().log_message(format, *args)
+        if len(args) >= 2:
+            status = int(args[1])
+            if status != 200:
+                super().log_message(format, *args)
         return
