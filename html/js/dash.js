@@ -44,7 +44,6 @@ var vchans = {
 var sch = [];  // Will be loaded from /api/schedule
 var current_vcid;
 var latest_image;
-var utc_date = "20260627";
 
 function init()
 {

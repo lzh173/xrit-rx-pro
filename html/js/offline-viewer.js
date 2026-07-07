@@ -224,7 +224,8 @@ function renderViewer(data)
 
     // Info bar
     html += '    <div class="image-info">';
-    html += '      <span class="info-type" id="info-type">' + (currentFile.name.match(/^IMG_FD_(\d+)/) ? 'FD #' + RegExp.$1 : currentFile.name) + '</span>';
+    var m = currentFile.name.match(/^IMG_FD_(\d+)/);
+    html += '      <span class="info-type" id="info-type">' + (m ? 'FD #' + m[1] : currentFile.name) + '</span>';
     html += '      <span class="info-file" id="info-file">' + currentFile.name + '</span>';
     html += '      <span class="info-date">' + formatDate(currentDate) + '</span>';
     html += '      <span><a href="' + getCurrentImageUrl() + '" target="_blank" id="info-link">打开原图</a></span>';
