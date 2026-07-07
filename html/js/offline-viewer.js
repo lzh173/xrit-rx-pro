@@ -235,6 +235,11 @@ function renderViewer(data)
 
     body.innerHTML = html;
 
+    // Sync type selector buttons with currentType (HTML hardcodes FD as active)
+    if (!isTextFile && currentFile) {
+        switchType(currentType);
+    }
+
     // If text file, fetch and display content
     if (isTextFile && currentFile) {
         var textUrl = '/api/' + currentFile.path.replace(/\\/g, '/');
@@ -454,19 +459,26 @@ function refreshLatest()
                                         ? fdProd.files[fdProd.files.length - 1].path : '';
 
                                     // If a new FD image arrived AND user was viewing the latest file
-                                    if (newLatestPath && newLatestPath !== oldPath && oldPath === fdProd.files[fdProd.files.length - 2].path) {
-                                        // User was on the previously-latest FD, advance to new one preserving type
-                                        var prevType = currentType;
-                                        currentFile = fdProd.files[fdProd.files.length - 1];
-                                        if (prevType === 'FC' && currentFile.fc) {
-                                            currentType = 'FC';
-                                        } else if (prevType === 'IRE' && currentFile.ire) {
-                                            currentType = 'IRE';
+                                    if (newLatestPath && newLatestPath !== oldPath) {
+                                        // Check user was indeed on the previous latest FD
+                                        var wasOnPrevLatest = fdProd.files.length >= 2 && oldPath === fdProd.files[fdProd.files.length - 2].path;
+                                        if (wasOnPrevLatest) {
+                                            // User was on the previously-latest FD, advance to new one preserving type
+                                            var prevType = currentType;
+                                            currentFile = fdProd.files[fdProd.files.length - 1];
+                                            if (prevType === 'FC' && currentFile.fc) {
+                                                currentType = 'FC';
+                                            } else if (prevType === 'IRE' && currentFile.ire) {
+                                                currentType = 'IRE';
+                                            } else {
+                                                currentType = 'FD';
+                                            }
+                                            renderViewer(data);
+                                            print("检测到新图片", "VIEWER");
                                         } else {
-                                            currentType = 'FD';
+                                            // User was on a specific older/non-FD file, don't disrupt their view
+                                            allProducts = products;
                                         }
-                                        renderViewer(data);
-                                        print("检测到新图片", "VIEWER");
                                     } else {
                                         // Just update data in background without re-render
                                         allProducts = products;
