@@ -449,7 +449,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(content)
             else:                                                       # Local file requests
-                self.path = "html/{}".format(self.path)
+                # Normalize path and prevent directory traversal
+                safe_path = os.path.normpath("html/{}".format(self.path))
+                # Ensure the resolved path stays within the html/ directory
+                if not safe_path.startswith(os.path.normpath("html")):
+                    self.send_response(403)
+                    self.end_headers()
+                    return
+                self.path = safe_path
 
                 if os.path.isfile(self.path):                           # Requested file exists (HTTP 200)
                     self.send_response(200)
@@ -460,9 +467,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.send_header('Content-type', mime)
                     self.end_headers()
 
-                    self.wfile.write(
-                        open(self.path, 'rb').read()
-                    )
+                    with open(self.path, 'rb') as f:
+                        self.wfile.write(f.read())
                 else:                                                   # Requested file not found (HTTP 404)
                     self.send_response(404)
                     self.end_headers()
