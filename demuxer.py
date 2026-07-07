@@ -370,7 +370,7 @@ class Channel:
             # Clear finished TP_File
             self.cTPFile = None
 
-        if self.config.verbose:
+        if self.config.verbose and self.cTPFile is not None:
             ac = len(self.cTPFile.PAYLOAD)
             ex = self.cTPFile.LENGTH
             p = round((ac/ex) * 100)
