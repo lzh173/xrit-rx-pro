@@ -224,7 +224,8 @@ class CP_PDU:
         else:
             return False
     
-    def CCITT_LUT(self):
+    @staticmethod
+    def CCITT_LUT():
         """
         Creates Lookup Table for CRC-16/CCITT-FALSE calculation
         """
