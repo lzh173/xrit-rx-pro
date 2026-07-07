@@ -108,7 +108,6 @@ function configure()
     // Setup polling loop
     setInterval(poll, config.interval * 1000);
     poll();
-    poll();
 
     return true;
 }
@@ -210,7 +209,7 @@ function block_vchan(element)
             indicator.innerHTML = `<span>${name}</span><p>VCID ${ch}</p>`;
 
             // Set 'disabled' attribute on blacklisted VCIDs
-            if (config.vcid_blacklist.indexOf(parseInt(ch)) > -1) {
+            if (config.vcid_blacklist.indexOf(parseInt(ch, 10)) > -1) {
                 indicator.setAttribute("disabled", "");
                 indicator.title += "（已列入黑名单）";
             }
@@ -221,7 +220,7 @@ function block_vchan(element)
     else {  // Update block
         for (var ch in vchans[config.spacecraft]) {
             // Do not update blacklisted channels
-            if (config.vcid_blacklist.indexOf(parseInt(ch)) > -1) { continue; }
+            if (config.vcid_blacklist.indexOf(parseInt(ch, 10)) > -1) { continue; }
 
             // Update active channel
             if (ch == current_vcid) {
@@ -313,7 +312,7 @@ function block_schedule(element)
         var end = sch[entry][1];
 
         if (time < start) {
-            first = Math.max(0, parseInt(entry) - 3);
+            first = Math.max(0, parseInt(entry, 10) - 3);
             break;
         }
     }
