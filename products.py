@@ -371,9 +371,8 @@ class MultiSegmentImage(Product):
 
         # Save JP2 to disk
         jp2Name = path + name + ".jp2"
-        f = open(jp2Name, "wb")
-        f.write(data)
-        f.close()
+        with open(jp2Name, "wb") as f:
+            f.write(data)
 
         # Convert J2P to PPM
         ppmName = path + name + ".ppm"
@@ -554,9 +553,8 @@ class SingleSegmentImage(Product):
         self.ext = self.get_ext()
         path = self.get_save_path(self.ext)
 
-        outf = open(path, mode="wb")
-        outf.write(self.payload)
-        outf.close()
+        with open(path, mode="wb") as outf:
+            outf.write(self.payload)
 
         print("    " + Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(path))
         self.last = path
@@ -602,10 +600,9 @@ class AlphanumericText(Product):
         """
 
         path = self.get_save_path(self.ext)
-        
-        outf = open(path, mode="wb")
-        outf.write(self.payload)
-        outf.close()
+
+        with open(path, mode="wb") as outf:
+            outf.write(self.payload)
 
         # Detect GK-2A LRIT DOP and auto-update schedule
         if b"GK-2A AMI LRIT DOP" in self.payload[:60]:

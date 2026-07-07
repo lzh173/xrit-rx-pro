@@ -566,9 +566,8 @@ class xRIT:
 
         # Save file to disk
         outPath = self.get_save_path(root)
-        outFile = open(outPath, mode="wb")
-        outFile.write(self.data)
-        outFile.close()
+        with open(outPath, mode="wb") as outFile:
+            outFile.write(self.data)
 
     def print_info(self, verbose):
         """
