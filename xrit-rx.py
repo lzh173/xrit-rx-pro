@@ -169,6 +169,7 @@ def loop():
                 winsound.Beep(800, 500)
                 sleep(3)
                 reconnect_source()
+                continue
 
             if len(data) == buflen + 8:
                 demux.push(data[8:])
@@ -181,8 +182,10 @@ def loop():
                 winsound.Beep(800, 500)
                 sleep(3)
                 reconnect_source()
+                continue
 
-            demux.push(data)
+            if len(data) == buflen:
+                demux.push(data)
 
         elif source == "UDP":
             try:
@@ -191,7 +194,8 @@ def loop():
                 print(e)
                 safe_stop()
 
-            demux.push(data)
+            if len(data) == buflen:
+                demux.push(data)
 
         elif source == "FILE":
             global packetf
