@@ -44,6 +44,7 @@ def _parse_dop_text(text):
     """
     Parse GK-2A DOP text into schedule array [[start,end,type,seq,mode,true],...]
     Returns None if not valid DOP.
+    Matches dash.py:parse_dop_text() logic exactly.
     """
     if "DISSEMINATION SCHEDULE" not in text:
         return None
@@ -61,7 +62,7 @@ def _parse_dop_text(text):
             continue
         if line.startswith("ABBREVIATIONS") or line.startswith("REMARKS"):
             break
-        if "END" in line:
+        if "GK-2A AMI LRIT DOP END" in line:
             break
         if not in_table:
             continue
