@@ -36,7 +36,8 @@ def load_schedule():
         with open(_schedule_path(), 'r', encoding='utf-8') as f:
             data = json.load(f)
             if isinstance(data, list):
-                return data
+                # Filter out EGMSG (emergency messages, rarely transmitted)
+                return [e for e in data if e[2] != 'EGMSG']
     except (FileNotFoundError, json.JSONDecodeError):
         pass
     return []

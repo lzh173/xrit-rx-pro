@@ -119,11 +119,14 @@ def _update_schedule_from_text(text):
     if schedule is None:
         return False
 
+    # Filter out EGMSG (emergency messages, rarely transmitted)
+    schedule_clean = [e for e in schedule if e[2] != 'EGMSG']
+
     try:
         with _schedule_lock:
             with open(_schedule_json_path(), 'w', encoding='utf-8') as f:
-                json.dump(schedule, f, ensure_ascii=False)
-        print("    " + Fore.GREEN + Style.BRIGHT + "计划表已自动更新（{} 条记录）".format(len(schedule)))
+                json.dump(schedule_clean, f, ensure_ascii=False)
+        print("    " + Fore.GREEN + Style.BRIGHT + "计划表已自动更新（{} 条记录，已过滤 EGMSG）".format(len(schedule_clean)))
         return True
     except Exception as e:
         print("    " + Fore.WHITE + Back.RED + Style.BRIGHT + "计划表写入失败: {}".format(e))
