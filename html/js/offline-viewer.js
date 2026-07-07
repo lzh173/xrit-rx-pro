@@ -192,34 +192,71 @@ function renderViewer(data)
     // ——— Main image area (right) ———
     html += '  <div class="main-area">';
 
-    // Type selector
-    html += '    <div class="type-selector" id="type-selector">';
-    html += '      <button class="type-btn active" data-type="FD" onclick="switchType(\'FD\')">🖼 原图</button>';
-    var hasFC = currentFile && currentFile.fc ? true : false;
-    var hasIRE = currentFile && currentFile.ire ? true : false;
-    html += '      <button class="type-btn' + (hasFC ? '' : ' disabled') + '" data-type="FC" onclick="switchType(\'FC\')">🎨 假彩色</button>';
-    html += '      <button class="type-btn' + (hasIRE ? '' : ' disabled') + '" data-type="IRE" onclick="switchType(\'IRE\')">🔥 红外增强</button>';
-    html += '    </div>';
+    var isTextFile = currentFile && currentFile.name.toLowerCase().endsWith('.txt');
 
-    // Main image
-    var imgSrc = getCurrentImageUrl();
-    html += '    <div class="main-image-wrap">';
-    html += '      <img id="main-img" src="' + imgSrc + '" alt="image" onerror="handleImgError()" onload="this.style.opacity=\'1\'">';
-    html += '      <div class="img-error" id="img-error">图片加载失败</div>';
-    html += '    </div>';
+    // Type selector (hide for text files)
+    if (!isTextFile) {
+        html += '    <div class="type-selector" id="type-selector">';
+        html += '      <button class="type-btn active" data-type="FD" onclick="switchType(\'FD\')">🖼 原图</button>';
+        var hasFC = currentFile && currentFile.fc ? true : false;
+        var hasIRE = currentFile && currentFile.ire ? true : false;
+        html += '      <button class="type-btn' + (hasFC ? '' : ' disabled') + '" data-type="FC" onclick="switchType(\'FC\')">🎨 假彩色</button>';
+        html += '      <button class="type-btn' + (hasIRE ? '' : ' disabled') + '" data-type="IRE" onclick="switchType(\'IRE\')">🔥 红外增强</button>';
+        html += '    </div>';
+    } else {
+        html += '    <div class="type-selector" id="type-selector" style="display:none;"></div>';
+    }
+
+    // Content area (image or text)
+    if (isTextFile) {
+        // Text file: fetch and display content
+        var textUrl = getCurrentImageUrl(); // Same path works for text
+        html += '    <div class="main-image-wrap" style="overflow-y:auto;justify-content:flex-start;align-items:flex-start;">';
+        html += '      <pre id="text-content" style="padding:15px;margin:0;font-size:13px;color:#ccc;white-space:pre-wrap;word-break:break-word;max-height:540px;overflow-y:auto;">正在加载文本内容...</pre>';
+        html += '    </div>';
+    } else {
+        var imgSrc = getCurrentImageUrl();
+        html += '    <div class="main-image-wrap">';
+        html += '      <img id="main-img" src="' + imgSrc + '" alt="image" onerror="handleImgError()" onload="this.style.opacity=\'1\'">';
+        html += '      <div class="img-error" id="img-error">图片加载失败</div>';
+        html += '    </div>';
+    }
 
     // Info bar
     html += '    <div class="image-info">';
     html += '      <span class="info-type" id="info-type">' + (currentFile.name.match(/^IMG_FD_(\d+)/) ? 'FD #' + RegExp.$1 : currentFile.name) + '</span>';
     html += '      <span class="info-file" id="info-file">' + currentFile.name + '</span>';
     html += '      <span class="info-date">' + formatDate(currentDate) + '</span>';
-    html += '      <span><a href="' + imgSrc + '" target="_blank" id="info-link">打开原图</a></span>';
+    html += '      <span><a href="' + getCurrentImageUrl() + '" target="_blank" id="info-link">打开原图</a></span>';
     html += '    </div>';
 
     html += '  </div>'; // end main-area
     html += '</div>';   // end viewer-split
 
     body.innerHTML = html;
+
+    // If text file, fetch and display content
+    if (isTextFile && currentFile) {
+        var textUrl = '/api/' + currentFile.path.replace(/\\/g, '/');
+        fetch(textUrl)
+            .then(function(resp) { return resp.text(); })
+            .then(function(text) {
+                var el = document.getElementById("text-content");
+                if (el) {
+                    // Show first 500 lines
+                    var lines = text.split('\n');
+                    if (lines.length > 500) {
+                        el.textContent = lines.slice(0, 500).join('\n') + '\n\n...（共 ' + lines.length + ' 行，截断显示）';
+                    } else {
+                        el.textContent = text;
+                    }
+                }
+            })
+            .catch(function() {
+                var el = document.getElementById("text-content");
+                if (el) el.textContent = "加载文本内容失败";
+            });
+    }
 
     // Restore product list scroll position
     var newProductList = document.getElementById("product-list");
@@ -245,8 +282,26 @@ function selectFile(path)
         var p = allProducts[pi];
         for (var fi = 0; fi < (p.files || []).length; fi++) {
             if (p.files[fi].path === path) {
+                // Determine if this is an FD file
+                var isFD = (p.name === 'FD');
+
+                // If switching between FD files, preserve FC/IRE type
+                var prevType = currentType;
                 currentFile = p.files[fi];
-                currentType = p.name === 'FD' ? 'FD' : p.name;
+
+                if (isFD) {
+                    // Keep current type if it's still valid for the new file
+                    if (prevType === 'FC' && currentFile.fc) {
+                        currentType = 'FC';
+                    } else if (prevType === 'IRE' && currentFile.ire) {
+                        currentType = 'IRE';
+                    } else {
+                        currentType = 'FD';
+                    }
+                } else {
+                    currentType = p.name;
+                }
+
                 renderViewer({"products": allProducts});
                 return;
             }
@@ -398,10 +453,18 @@ function refreshLatest()
                                     var newLatestPath = (fdProd && fdProd.files && fdProd.files.length > 0)
                                         ? fdProd.files[fdProd.files.length - 1].path : '';
 
-                                    // If a new FD image arrived
-                                    if (newLatestPath && newLatestPath !== oldPath) {
+                                    // If a new FD image arrived AND user was viewing the latest file
+                                    if (newLatestPath && newLatestPath !== oldPath && oldPath === fdProd.files[fdProd.files.length - 2].path) {
+                                        // User was on the previously-latest FD, advance to new one preserving type
+                                        var prevType = currentType;
                                         currentFile = fdProd.files[fdProd.files.length - 1];
-                                        currentType = 'FD';
+                                        if (prevType === 'FC' && currentFile.fc) {
+                                            currentType = 'FC';
+                                        } else if (prevType === 'IRE' && currentFile.ire) {
+                                            currentType = 'IRE';
+                                        } else {
+                                            currentType = 'FD';
+                                        }
                                         renderViewer(data);
                                         print("检测到新图片", "VIEWER");
                                     } else {

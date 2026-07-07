@@ -7,15 +7,209 @@ Dashboard HTTP server
 
 from colorama import Fore, Back, Style
 import http.server
+import io
 import json
 import mimetypes
 import os
 from socketserver import ThreadingTCPServer
 import glob
+import threading
+from time import sleep
 from threading import Thread
 
 dash_config = None
 demuxer_instance = None
+
+# Schedule lock for thread-safe writes
+_schedule_lock = threading.Lock()
+
+
+def _schedule_path():
+    """Get the absolute path to schedule.json."""
+    # Resolve relative to dash.py location (project root)
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "html", "schedule.json")
+
+
+def load_schedule():
+    """Load schedule from schedule.json, return empty list on failure."""
+    try:
+        with open(_schedule_path(), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return []
+
+
+def save_schedule(schedule):
+    """Thread-safe write of schedule data to schedule.json."""
+    with _schedule_lock:
+        try:
+            with open(_schedule_path(), 'w', encoding='utf-8') as f:
+                json.dump(schedule, f, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(Fore.WHITE + Back.RED + Style.BRIGHT + "保存计划表失败: {}".format(e))
+            return False
+
+
+def parse_dop_text(text):
+    """
+    Parse GK-2A DOP (Daily Operation Plan) text into schedule array.
+    Returns list in format [[start, end, type, seq, mode, true], ...]
+    or None if text is not a valid DOP.
+    """
+    # Check DOP header
+    if "GK-2A AMI LRIT DOP" not in text and "Daily Operation Plan" not in text:
+        if "DISSEMINATION SCHEDULE" not in text:
+            return None
+
+    lines = text.split('\n')
+    schedule = []
+    in_table = False
+
+    for line in lines:
+        line = line.strip()
+        # Skip header/empty lines
+        if not line:
+            continue
+        # Detect table header
+        if "TIME(UTC)" in line and "ABBR_ID" in line:
+            in_table = True
+            continue
+        # End of table
+        if line.startswith("ABBREVIATIONS") or line.startswith("REMARKS"):
+            break
+        if "GK-2A AMI LRIT DOP END" in line:
+            break
+
+        if not in_table:
+            continue
+
+        # Parse table row: "001006-001236\tFD001\tFD\tO"
+        parts = line.split('\t')
+        if len(parts) < 3:
+            # Try splitting by spaces/tabs
+            parts = [p for p in line.replace('\t', ' ').split(' ') if p]
+            if len(parts) < 3:
+                continue
+
+        # First part: "001006-001236"
+        time_range = parts[0].replace(' ', '')
+        if '-' not in time_range:
+            continue
+        time_parts = time_range.split('-')
+        if len(time_parts) != 2:
+            continue
+        start = time_parts[0].strip()
+        end = time_parts[1].strip()
+
+        # Second part: "FD001" or "TYIA001" or "EGMSG001"
+        abbr = parts[1].strip()
+
+        # Extract type and sequence from ABBR_ID
+        # FD001 -> type="FD", seq="001"
+        # TYIA001 -> type="TYIA", seq="001"
+        # EGMSG001 -> type="EGMSG", seq="001"
+        # COMSIR1001 -> type="COMSIR1", seq="001"
+        type_str = ""
+        seq_str = ""
+        mode_str = ""
+
+        # Determine type by known prefixes
+        if abbr.startswith("FD") and len(abbr) > 2 and abbr[2:].isdigit():
+            type_str = "FD"
+            seq_str = abbr[2:]
+            mode_str = "FD"
+        elif abbr.startswith("EGMSG"):
+            type_str = "EGMSG"
+            seq_str = abbr[5:]
+        elif abbr.startswith("TYIA"):
+            type_str = "TYIA"
+            seq_str = abbr[4:]
+        elif abbr.startswith("TYIB"):
+            type_str = "TYIB"
+            seq_str = abbr[4:]
+        elif abbr.startswith("RWW3A"):
+            type_str = "RWW3A"
+            seq_str = abbr[5:]
+        elif abbr.startswith("RWW3F"):
+            type_str = "RWW3F"
+            seq_str = abbr[5:]
+        elif abbr.startswith("RWW3M"):
+            type_str = "RWW3M"
+            seq_str = abbr[5:]
+        elif abbr.startswith("GWW3F"):
+            type_str = "GWW3F"
+            seq_str = abbr[5:]
+        elif abbr.startswith("SUFA03"):
+            type_str = "SUFA03"
+            seq_str = abbr[6:]
+        elif abbr.startswith("SUFA12"):
+            type_str = "SUFA12"
+            seq_str = abbr[6:]
+        elif abbr.startswith("SUFF24"):
+            type_str = "SUFF24"
+            seq_str = abbr[6:]
+        elif abbr.startswith("UP50A"):
+            type_str = "UP50A"
+            seq_str = abbr[5:]
+        elif abbr.startswith("UP50F24"):
+            type_str = "UP50F24"
+            seq_str = abbr[7:]
+        elif abbr.startswith("UP50F48"):
+            type_str = "UP50F48"
+            seq_str = abbr[7:]
+        elif abbr.startswith("SSTA"):
+            type_str = "SSTA"
+            seq_str = abbr[4:]
+        elif abbr.startswith("SSTF24"):
+            type_str = "SSTF24"
+            seq_str = abbr[6:]
+        elif abbr.startswith("SSTF48"):
+            type_str = "SSTF48"
+            seq_str = abbr[6:]
+        elif abbr.startswith("SSTF72"):
+            type_str = "SSTF72"
+            seq_str = abbr[6:]
+        elif abbr.startswith("SICEA"):
+            type_str = "SICEA"
+            seq_str = abbr[5:]
+        elif abbr.startswith("SICEF24"):
+            type_str = "SICEF24"
+            seq_str = abbr[7:]
+        elif abbr.startswith("SICEF48"):
+            type_str = "SICEF48"
+            seq_str = abbr[7:]
+        elif abbr.startswith("FOGVIS"):
+            type_str = "FOGVIS"
+            seq_str = abbr[6:]
+        elif abbr.startswith("ANT"):
+            type_str = "ANT"
+            seq_str = abbr[3:]
+        elif abbr.startswith("COMSFOG"):
+            type_str = "COMSFOG"
+            seq_str = abbr[7:]
+        elif abbr.startswith("COMSIR1"):
+            type_str = "COMSIR1"
+            seq_str = abbr[7:]
+        elif abbr.startswith("FCT"):
+            type_str = "FCT"
+            seq_str = abbr[3:]
+        else:
+            # Generic: extract trailing digits
+            type_str = abbr
+            seq_str = ""
+
+        if seq_str and not seq_str.isdigit():
+            seq_str = ""
+
+        schedule.append([start, end, type_str, seq_str, mode_str, True])
+
+    if not schedule:
+        return None
+    return schedule
 
 
 def _np(path):
@@ -100,7 +294,7 @@ def get_available_dates(output_path):
             count = 0
             for root, dirs, files in os.walk(date_dir):
                 for f in files:
-                    if f.lower().endswith(('.jpg', '.png', '.gif')):
+                    if f.lower().endswith(('.jpg', '.png', '.gif', '.txt')):
                         count += 1
             if count > 0:
                 dates.append({"date": d, "count": count})
@@ -174,6 +368,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """
         Respond to GET requests
         """
+
+        # /upload: schedule import page
+        if self.path == "/upload":
+            self.serve_upload_page()
+            return
 
         # /viewer: product viewer (in both offline and normal mode)
         if self.path == "/viewer":
@@ -268,6 +467,81 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.end_headers()
         except ConnectionAbortedError:
             return
+
+
+    def serve_upload_page(self):
+        """Serve the schedule import/upload page."""
+        html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>xrit-rx 计划表导入</title>
+<style>
+body{font-family:'Segoe UI',sans-serif;background:#1a1a2e;color:#eee;padding:40px;max-width:600px;margin:auto}
+h1{color:#e94560}
+.form-group{margin:20px 0}
+label{display:block;margin-bottom:8px;color:#f5a623}
+input[type=file]{background:#16213e;color:#eee;padding:10px;border:1px solid #555;border-radius:4px;width:100%}
+button{background:#e94560;color:#0f3460;padding:10px 30px;border:none;border-radius:6px;font-size:16px;font-weight:bold;cursor:pointer}
+button:hover{background:#ff6b7f}
+#result{margin-top:20px;padding:15px;border-radius:6px;display:none}
+.success{background:#090;border:1px solid #2ecc71}
+.error{background:#400;border:1px solid #700}
+.info{color:#666;font-size:13px;margin-top:20px}
+code{background:#16213e;padding:2px 6px;border-radius:3px}
+</style></head>
+<body>
+<h1>📅 xrit-rx 计划表导入</h1>
+<p>上传 GK-2A DOP 计划表文件（.txt 或 .bin），自动解析并替换当前计划表。</p>
+<form id="uploadForm" enctype="multipart/form-data">
+<div class="form-group"><label>选择计划表文件</label><input type="file" name="schedule" accept=".txt,.bin,.lrit,text/plain" required></div>
+<button type="submit">上传并更新</button>
+</form>
+<div id="result"></div>
+<div class="info">
+<p><strong>支持的文件格式：</strong></p>
+<ul>
+<li>其他软件接收的 ANT .bin 文件（纯文本）</li>
+<li>本软件保存的 ANT .txt 文件</li>
+<li>GK-2A LRIT DOP 格式文本文件</li>
+</ul>
+</div>
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var formData = new FormData();
+    var file = document.querySelector('input[type=file]').files[0];
+    if (!file) return;
+    formData.append('schedule', file);
+    var resultEl = document.getElementById('result');
+    resultEl.style.display = 'block';
+    resultEl.textContent = '正在上传解析...';
+    resultEl.className = '';
+    // Read file as text and send via POST
+    var reader = new FileReader();
+    reader.onload = function(evt) {
+        fetch('/api/upload_schedule', {method:'POST', body:evt.target.result})
+        .then(function(r){return r.json()})
+        .then(function(data){
+            resultEl.style.display = 'block';
+            if (data.success) {
+                resultEl.className = 'success';
+                resultEl.textContent = '✅ ' + data.message;
+            } else {
+                resultEl.className = 'error';
+                resultEl.textContent = '❌ ' + (data.error || '解析失败');
+            }
+        })
+        .catch(function(err) {
+            resultEl.className = 'error';
+            resultEl.textContent = '❌ 请求失败: ' + err;
+        });
+    };
+    reader.readAsText(file);
+});
+</script>
+</body></html>"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
 
 
     def serve_latest(self, filepath):
@@ -405,6 +679,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     'xrit': xrit
                 }
 
+        elif path[0] == "schedule":
+            if len(path) == 1:
+                # GET /api/schedule - return schedule data
+                content = load_schedule()
+
+        elif path[0] == "upload_schedule":
+            # POST /api/upload_schedule - called via do_POST
+            content = self.handle_schedule_upload()
+
         elif path[0] == "offline":
             # Works in both offline and normal mode
             if len(path) == 2 and path[1] == "dates":
@@ -471,7 +754,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 item = {"name": d, "type": "directory", "files": []}
                 for f in sorted(os.listdir(sub)):
                     fpath = os.path.join(sub, f)
-                    if os.path.isfile(fpath) and f.lower().endswith(('.jpg', '.png', '.gif')):
+                    if os.path.isfile(fpath) and f.lower().endswith(('.jpg', '.png', '.gif', '.txt')):
                         info = {"name": f, "path": _np(fpath)}
                         # Check FC subdirectory
                         fc_path = os.path.join(sub, "FC", f)
@@ -484,6 +767,54 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if item["files"]:
                     products.append(item)
         return {"date": target_date, "products": products}
+
+
+    def do_POST(self):
+        """Handle POST requests (schedule import)."""
+        try:
+            length = int(self.headers.get('Content-length', 0))
+            if length == 0:
+                self.send_response(400)
+                self.end_headers()
+                return
+
+            body = self.rfile.read(length)
+
+            if self.path == "/api/upload_schedule":
+                result = self.handle_schedule_upload(body)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))
+            else:
+                self.send_response(404)
+                self.end_headers()
+        except Exception as e:
+            print(Fore.WHITE + Back.RED + Style.BRIGHT + "POST 处理错误: {}".format(e))
+            self.send_response(500)
+            self.end_headers()
+
+
+    def handle_schedule_upload(self, body=None):
+        """Handle schedule file upload/import."""
+        if body is None:
+            return {"success": False, "error": "无数据"}
+
+        # Try to decode as text
+        try:
+            text = body.decode('utf-8')
+        except UnicodeDecodeError:
+            return {"success": False, "error": "文件编码错误，请使用 UTF-8 编码的文本文件"}
+
+        # Parse DOP
+        schedule = parse_dop_text(text)
+        if schedule is None:
+            return {"success": False, "error": "不是有效的 GK-2A DOP 计划表文件"}
+
+        if save_schedule(schedule):
+            return {"success": True, "count": len(schedule), "message": "计划表已更新，共 {} 条记录".format(len(schedule))}
+        else:
+            return {"success": False, "error": "写入计划表文件失败"}
 
 
     def log_message(self, format, *args):

@@ -9,12 +9,125 @@ import collections
 import colorama
 from colorama import Fore, Back, Style
 import io
+import json
 import numpy as np
 import os
 import pathlib
 import sys
+import threading
 from PIL import Image, ImageFile, UnidentifiedImageError
 import subprocess
+
+# Schedule update lock
+_schedule_lock = threading.Lock()
+
+# Schedule types known to GK-2A DOP
+DOP_TYPES = {
+    "FD": "FD", "EGMSG": "EGMSG", "TYIA": "TYIA", "TYIB": "TYIB",
+    "RWW3A": "RWW3A", "RWW3F": "RWW3F", "RWW3M": "RWW3M",
+    "GWW3F": "GWW3F", "SUFA03": "SUFA03", "SUFA12": "SUFA12",
+    "SUFF24": "SUFF24", "UP50A": "UP50A", "UP50F24": "UP50F24",
+    "UP50F48": "UP50F48", "SSTA": "SSTA", "SSTF24": "SSTF24",
+    "SSTF48": "SSTF48", "SSTF72": "SSTF72", "SICEA": "SICEA",
+    "SICEF24": "SICEF24", "SICEF48": "SICEF48", "FOGVIS": "FOGVIS",
+    "ANT": "ANT", "COMSFOG": "COMSFOG", "COMSIR1": "COMSIR1",
+    "FCT": "FCT",
+}
+
+
+def _schedule_json_path():
+    """Get path to schedule.json (same dir as this file + html/schedule.json)."""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "html", "schedule.json")
+
+
+def _parse_dop_text(text):
+    """
+    Parse GK-2A DOP text into schedule array [[start,end,type,seq,mode,true],...]
+    Returns None if not valid DOP.
+    """
+    if "DISSEMINATION SCHEDULE" not in text:
+        return None
+
+    lines = text.split('\n')
+    schedule = []
+    in_table = False
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if "TIME(UTC)" in line and "ABBR_ID" in line:
+            in_table = True
+            continue
+        if line.startswith("ABBREVIATIONS") or line.startswith("REMARKS"):
+            break
+        if "END" in line:
+            break
+        if not in_table:
+            continue
+
+        parts = line.split('\t')
+        if len(parts) < 3:
+            parts = [p for p in line.replace('\t', ' ').split(' ') if p]
+            if len(parts) < 3:
+                continue
+
+        time_range = parts[0].replace(' ', '')
+        if '-' not in time_range:
+            continue
+        time_parts = time_range.split('-')
+        if len(time_parts) != 2:
+            continue
+        start = time_parts[0].strip()
+        end = time_parts[1].strip()
+        abbr = parts[1].strip()
+
+        type_str = ""
+        seq_str = ""
+        mode_str = ""
+
+        # Try known prefixes from longest to shortest
+        known = sorted(DOP_TYPES.keys(), key=len, reverse=True)
+        for prefix in known:
+            if abbr.startswith(prefix):
+                suffix = abbr[len(prefix):]
+                if suffix.isdigit() or not suffix:
+                    type_str = prefix
+                    seq_str = suffix
+                    if prefix == "FD":
+                        mode_str = "FD"
+                    break
+
+        if not type_str:
+            continue
+
+        schedule.append([start, end, type_str, seq_str, mode_str, True])
+
+    return schedule if schedule else None
+
+
+def _update_schedule_from_text(text):
+    """If text is a valid DOP, parse it and save to schedule.json."""
+    try:
+        payload_str = text
+        if isinstance(text, bytes):
+            payload_str = text.decode('utf-8')
+    except UnicodeDecodeError:
+        return False
+
+    schedule = _parse_dop_text(payload_str)
+    if schedule is None:
+        return False
+
+    try:
+        with _schedule_lock:
+            with open(_schedule_json_path(), 'w', encoding='utf-8') as f:
+                json.dump(schedule, f, ensure_ascii=False)
+        print("    " + Fore.GREEN + Style.BRIGHT + "计划表已自动更新（{} 条记录）".format(len(schedule)))
+        return True
+    except Exception as e:
+        print("    " + Fore.WHITE + Back.RED + Style.BRIGHT + "计划表写入失败: {}".format(e))
+        return False
 
 
 def new(config, name):
@@ -491,9 +604,16 @@ class AlphanumericText(Product):
         outf.write(self.payload)
         outf.close()
 
-        # Detect GK-2A LRIT DOP
-        if self.payload[:40].decode('utf-8') == "GK-2A AMI LRIT DOP(Daily Operation Plan)":
+        # Detect GK-2A LRIT DOP and auto-update schedule
+        if b"GK-2A AMI LRIT DOP" in self.payload[:60]:
             print("    GK-2A LRIT Daily Operation Plan")
+            try:
+                text = self.payload.decode('utf-8')
+                # Only update schedule if this is for today
+                if "DISSEMINATION SCHEDULE FROM" in text:
+                    _update_schedule_from_text(text)
+            except UnicodeDecodeError:
+                pass
 
         print("    " + Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(path))
         self.last = path
