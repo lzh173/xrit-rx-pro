@@ -552,10 +552,8 @@ class xRIT:
             fExt = self.FILE_NAME.split(".")[1]
 
         # Check output directories exist
-        if not os.path.exists("{}/{}".format(root, txDate)): os.mkdir(root + "/" + txDate)
-        lrit_dir = "{}/{}/LRIT_FILE".format(root, txDate)
-        if not os.path.exists(lrit_dir):
-            os.mkdir(lrit_dir)
+        os.makedirs("{}/{}".format(root, txDate), exist_ok=True)
+        os.makedirs("{}/{}/LRIT_FILE".format(root, txDate), exist_ok=True)
 
         return lrit_dir + "/" + self.FILE_NAME
 
