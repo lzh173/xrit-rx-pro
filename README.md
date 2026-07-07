@@ -14,7 +14,8 @@
 | 🖼️ **图片直出 API** | `/latest`、`/latest_FDFC`、`/latest_FDIRE`、`/latest_add` |
 | 🎨 **自动假彩色** | Full Disk 保存后自动用 Sanchez 生成球面假彩（FD/FC/）|
 | 🔥 **自动红外增强** | Full Disk 保存后自动生成红外增强图（FD/IRE/）|
-| 📂 **离线产品查看器** | `-offline` 模式浏览全部已接收产品（FD/FC/IRE/ADD）|
+| 📂 **离线产品查看器** | `-offline` 模式或 `/viewer` 浏览全部已接收产品 |
+| 📅 **计划表管理** | ANT 自动解析更新、手动上传导入、独立 JSON 文件 |
 | 🔄 **断线重连** | TCP 连接断开后自动重试（指数退避，最多 5 次）|
 | 🔔 **音频提示** | 丢包提示音 + 断联提示音 |
 | 🇨🇳 **全界面汉化** | Python 后端 + Web 前端全部中文化 |
@@ -63,6 +64,7 @@ python xrit-rx.py -offline
 - **仪表板**（正常模式）: `http://<IP>:1692/`
 - **产品查看器**（在线/离线均可）: `http://<IP>:1692/viewer`
 - **离线产品查看器**（`-offline` 模式）: `http://<IP>:1692/`
+- **计划表导入**: `http://<IP>:1692/upload`
 - **API 导航**: `http://<IP>:1692/apilist`
 
 ## 🌐 Web 端点
@@ -75,6 +77,13 @@ python xrit-rx.py -offline
 | `/latest_FDFC` | 最新假彩色（球面圆盘） |
 | `/latest_FDIRE` | 最新红外增强 |
 | `/latest_add` | 最新附加数据图片 |
+
+### 计划表
+
+| 端点 | 描述 |
+|------|------|
+| `/api/schedule` | 获取当前计划表数据（JSON） |
+| `/upload` | 计划表手动导入页面（支持 .txt/.bin DOP 文件） |
 
 ### JSON API
 
@@ -179,7 +188,7 @@ FD 图片保存后自动触发：
 
 | 版本 | 说明 |
 |------|------|
-| **v2.0.1** | 路径修复、`/viewer` 在线产品查看端点、自适应轮询 |
+| **v2.0.1** | 计划表独立 JSON 文件、ANT 自动解析更新、手动导入、文本文件查看、在线产品查看端点 |
 | v2.0.0 | 全界面汉化、离线模式、假彩色/红外增强自动生成、音频提示、多线程 HTTP |
 | v1.3.1 | 原版最新版本（[sam210723/xrit-rx](https://github.com/sam210723/xrit-rx)） |
 
