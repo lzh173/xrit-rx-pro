@@ -367,8 +367,8 @@ def load_keys():
         return False
 
     # Load key file
-    keyf = open(keypath, mode='rb')
-    fbytes = keyf.read()
+    with open(keypath, mode='rb') as keyf:
+        fbytes = keyf.read()
 
     # Parse key count
     count = int.from_bytes(fbytes[:2], byteorder='big')
