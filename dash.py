@@ -285,7 +285,12 @@ def get_latest_from_metadata(meta_type, base_path=None):
         pass
 
     if latest_entry:
-        path = latest_entry.get("path", "")
+        if meta_type == 'FC':
+            path = latest_entry.get("fc", "")
+        elif meta_type == 'IRE':
+            path = latest_entry.get("ire", "")
+        else:
+            path = latest_entry.get("path", "")
         if path:
             return os.path.join(base_path, path.replace("/", "\\")).replace("\\", "/")
     return None
