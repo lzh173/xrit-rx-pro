@@ -383,53 +383,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.path = "index.html"
 
         try:
-            # --- Image endpoints (work in both online and offline mode) ---
+            # --- Image viewer pages (self-refreshing HTML) ---
             if self.path == "/latest":
-                if dash_config.offline:
-                    fp, _ = scan_latest_fd(dash_config.output)
-                else:
-                    fp = demuxer_instance.lastImageFD if demuxer_instance else None
-                self.serve_latest(fp)
+                fp = self._get_latest_fd()
+                self.serve_image_viewer(fp, "最新全盘图 (FD)", "原图")
                 return
 
             if self.path == "/latest_add":
-                if dash_config.offline:
-                    fp = scan_latest_add(dash_config.output)
-                else:
-                    fp = demuxer_instance.lastImageADD if demuxer_instance else None
-                self.serve_latest(fp)
+                fp = self._get_latest_add()
+                self.serve_image_viewer(fp, "最新附加数据 (ADD)", "附加数据")
                 return
 
             if self.path == "/latest_FDFC":
-                if dash_config.offline:
-                    fp = scan_latest_fc(dash_config.output)
-                else:
-                    fp = None
-                    fd_img = demuxer_instance.lastImageFD if demuxer_instance else None
-                    if fd_img:
-                        fc_dir = os.path.join(os.path.dirname(fd_img), "FC")
-                        if os.path.isdir(fc_dir):
-                            fc_files = [f for f in os.listdir(fc_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))]
-                            if fc_files:
-                                fc_files.sort(reverse=True)
-                                fp = os.path.join(fc_dir, fc_files[0])
-                self.serve_latest(fp)
+                fp = self._get_latest_fc()
+                self.serve_image_viewer(fp, "最新假彩色 (FD/FC)", "假彩色")
                 return
 
             if self.path == "/latest_FDIRE":
-                if dash_config.offline:
-                    fp = scan_latest_ire(dash_config.output)
-                else:
-                    fp = None
-                    fd_img = demuxer_instance.lastImageFD if demuxer_instance else None
-                    if fd_img:
-                        ire_dir = os.path.join(os.path.dirname(fd_img), "IRE")
-                        if os.path.isdir(ire_dir):
-                            ire_files = [f for f in os.listdir(ire_dir) if f.lower().endswith(('.jpg', '.png', '.gif'))]
-                            if ire_files:
-                                ire_files.sort(reverse=True)
-                                fp = os.path.join(ire_dir, ire_files[0])
-                self.serve_latest(fp)
+                fp = self._get_latest_ire()
+                self.serve_image_viewer(fp, "最新红外增强 (FD/IRE)", "红外增强")
                 return
 
             # Serve API list page
@@ -542,6 +514,49 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
 });
 </script>
 </body></html>"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
+
+
+    def _get_latest_fd(self):
+        """Get latest FD image path."""
+        if dash_config.offline:
+            fp, _ = scan_latest_fd(dash_config.output)
+        else:
+            fp = demuxer_instance.lastImageFD if demuxer_instance else None
+        return fp
+
+    def _get_latest_add(self):
+        """Get latest ADD image path (always scan filesystem)."""
+        return scan_latest_add(dash_config.output)
+
+    def _get_latest_fc(self):
+        """Get latest FC image path (always scan filesystem)."""
+        return scan_latest_fc(dash_config.output)
+
+    def _get_latest_ire(self):
+        """Get latest IRE image path (always scan filesystem)."""
+        return scan_latest_ire(dash_config.output)
+
+    def serve_image_viewer(self, filepath, title, label="图片"):
+        """Serve a self-refreshing HTML page showing an image."""
+        html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+        html += '<meta http-equiv="refresh" content="5">'
+        html += '<title>{} - xrit-rx</title>'.format(title)
+        html += '<style>body{margin:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;color:#999;font-family:sans-serif}img{max-width:100%;max-height:95vh}'
+        html += '.info{position:fixed;bottom:10px;right:10px;background:rgba(0,0,0,0.7);color:#666;padding:4px 12px;border-radius:4px;font-size:12px}'
+        html += '.loading{color:#555;font-size:20px}</style></head><body>'
+        if filepath and os.path.isfile(filepath):
+            img_url = '/api/' + _np(filepath)
+            fname = os.path.basename(filepath)
+            html += '<img src="{}" alt="{}">'.format(img_url, label)
+            html += '<div class="info">{} | 每5秒自动刷新</div>'.format(fname)
+        else:
+            html += '<div class="loading">等待{}...</div>'.format(label)
+            html += '<div class="info">每5秒自动刷新</div>'
+        html += '</body></html>'
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
