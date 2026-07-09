@@ -1,6 +1,6 @@
 """
 enhance-ir.py
-https://github.com/lzh173/xrit-rx
+https://github.com/lzh173/xrit-rx-pro
 
 GK-2A Infrared Colour Enhancement
 """

@@ -1,6 +1,6 @@
 """
 lrit-add.py
-https://github.com/lzh173/xrit-rx
+https://github.com/lzh173/xrit-rx-pro
 
 Extracts data from LRIT Additional Data (ADD) files.
 """

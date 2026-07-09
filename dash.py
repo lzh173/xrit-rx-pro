@@ -1,6 +1,6 @@
 """
 dash.py
-https://github.com/lzh173/xrit-rx
+https://github.com/lzh173/xrit-rx-pro
 
 Dashboard HTTP server
 """
@@ -612,7 +612,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     <h2>📊 Web 仪表板</h2>
     <div class="endpoint"><a href="http://{host}/" target="_blank">/</a> <span class="desc">xrit-rx {"离线产品查看器" if dash_config.offline else "仪表板主页"}</span></div>
 
-    <p style="margin-top: 40px; color: #666; font-size: 13px;">xrit-rx · <a href="https://github.com/lzh173/xrit-rx" style="background: none; padding: 0; color: #e94560; display: inline;">GitHub</a></p>
+    <p style="margin-top: 40px; color: #666; font-size: 13px;">xrit-rx · <a href="https://github.com/lzh173/xrit-rx-pro" style="background: none; padding: 0; color: #e94560; display: inline;">GitHub</a></p>
 </body>
 </html>"""
         self.send_response(200)
