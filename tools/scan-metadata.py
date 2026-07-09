@@ -75,6 +75,17 @@ def scan_and_update():
 
     for i, filepath in enumerate(files):
         rel_path = os.path.relpath(filepath, RECEIVED_DIR).replace("\\", "/")
+
+        # Skip FC/IRE generated files - they are referenced by the original FD entry
+        if "/FC/" in rel_path or "/IRE/" in rel_path:
+            continue
+        bname = os.path.basename(filepath)
+        # Skip old-style -FC / -IRE / _ENHANCED suffixed files in FD directory
+        if bname.endswith("-FC.jpg") or bname.endswith("-FC.png") or \
+           bname.endswith("-IRE.jpg") or bname.endswith("-IRE.png") or \
+           bname.endswith("_ENHANCED.jpg") or bname.endswith("_ENHANCED.png"):
+            continue
+
         sha256 = compute_sha256(filepath)
 
         if rel_path in existing:
@@ -89,7 +100,7 @@ def scan_and_update():
                 )
         else:
             # New file - create metadata entry
-            fname = os.path.basename(filepath)
+            fname = bname
             entry = {
                 "file_name": fname,
                 "path": rel_path,
@@ -110,6 +121,10 @@ def scan_and_update():
                 if len(parts) >= 3:
                     entry["observation_mode"] = parts[1]
                     entry["product"] = parts[1]
+                # IMG: IMG_MODE_SEQ_CH_DATE_TIME_SEG.EXT
+                if len(parts) >= 6 and len(parts[4]) == 8 and parts[4].isdigit():
+                    entry["date"] = parts[4]
+                    entry["time"] = parts[5] if len(parts[5]) >= 6 else ""
                 # Check for FC/IRE
                 parent = os.path.dirname(filepath)
                 base = os.path.basename(filepath)
@@ -123,13 +138,18 @@ def scan_and_update():
                 entry["type"] = "ADD"
                 if len(parts) >= 3:
                     entry["product"] = parts[1]
+                # ADD: ADD_TYPE_SEQ_DATE_TIME_SEG.EXT
+                if len(parts) >= 5 and len(parts[3]) == 8 and parts[3].isdigit():
+                    entry["date"] = parts[3]
+                    entry["time"] = parts[4] if len(parts[4]) >= 6 else ""
 
-            # Extract date/time from path
-            path_parts = rel_path.replace("\\", "/").split("/")
-            for p in path_parts:
-                if len(p) == 8 and p.isdigit():
-                    entry["date"] = p
-                    break
+            # Fallback: extract date from path if not set above
+            if not entry.get("date"):
+                path_parts = rel_path.replace("\\", "/").split("/")
+                for p in path_parts:
+                    if len(p) == 8 and p.isdigit():
+                        entry["date"] = p
+                        break
 
             new_entries.append(entry)
             new_count += 1
