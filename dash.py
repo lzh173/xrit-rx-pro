@@ -217,8 +217,86 @@ def _np(path):
     return path.replace("\\", "/") if path else path
 
 
+def load_metadata():
+    """Load all entries from metadata.jsonl into a dict of {date: [entries]}."""
+    meta_path = os.path.join(dash_config.output, "metadata.jsonl") if dash_config else None
+    if not meta_path or not os.path.exists(meta_path):
+        return {}
+
+    by_date = {}
+    try:
+        with open(meta_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                entry = json.loads(line)
+                date = entry.get("date", "")
+                if date:
+                    by_date.setdefault(date, []).append(entry)
+    except Exception:
+        return {}
+    return by_date
+
+
+def get_metadata_for_date(date_str):
+    """Get metadata entries for a specific date."""
+    meta = load_metadata()
+    return meta.get(date_str, [])
+
+
+def get_latest_from_metadata(meta_type, base_path=None):
+    """Get the latest file path for a given type from metadata.
+
+    meta_type: 'FD', 'FC', 'IRE', 'ADD' (for non-FD products)
+    base_path: dash_config.output (the received/ base)
+    """
+    if base_path is None:
+        base_path = dash_config.output
+    meta_path = os.path.join(base_path, "metadata.jsonl")
+    if not os.path.exists(meta_path):
+        return None
+
+    latest_entry = None
+    try:
+        with open(meta_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line: continue
+                entry = json.loads(line)
+                if meta_type == 'FD' and entry.get("product") == 'FD':
+                    if latest_entry is None or entry.get("date", "") + entry.get("time", "") > \
+                       latest_entry.get("date", "") + latest_entry.get("time", ""):
+                        latest_entry = entry
+                elif meta_type == 'FC' and entry.get("fc"):
+                    if latest_entry is None or entry.get("date", "") + entry.get("time", "") > \
+                       latest_entry.get("date", "") + latest_entry.get("time", ""):
+                        latest_entry = entry
+                elif meta_type == 'IRE' and entry.get("ire"):
+                    if latest_entry is None or entry.get("date", "") + entry.get("time", "") > \
+                       latest_entry.get("date", "") + latest_entry.get("time", ""):
+                        latest_entry = entry
+                elif meta_type == 'ADD' and entry.get("type") == 'ADD':
+                    prod = entry.get("product", "")
+                    if prod and prod != 'ANT':
+                        if latest_entry is None or entry.get("date", "") + entry.get("time", "") > \
+                           latest_entry.get("date", "") + latest_entry.get("time", ""):
+                            latest_entry = entry
+    except Exception:
+        pass
+
+    if latest_entry:
+        path = latest_entry.get("path", "")
+        if path:
+            return os.path.join(base_path, path.replace("/", "\\")).replace("\\", "/")
+    return None
+
+
 def scan_latest_fd(output_path):
     """Scan received directory for the latest FD image."""
+    # Try metadata first
+    fp = get_latest_from_metadata('FD', output_path)
+    if fp:
+        return fp, os.path.basename(os.path.dirname(os.path.dirname(fp)))
     base = os.path.join(output_path, "LRIT")
     if not os.path.isdir(base):
         return None, None
@@ -234,6 +312,10 @@ def scan_latest_fd(output_path):
 
 def scan_latest_fc(output_path):
     """Scan for the latest FD/FC image."""
+    # Try metadata first
+    fp = get_latest_from_metadata('FC', output_path)
+    if fp:
+        return fp
     base = os.path.join(output_path, "LRIT")
     if not os.path.isdir(base):
         return None
@@ -249,6 +331,10 @@ def scan_latest_fc(output_path):
 
 def scan_latest_ire(output_path):
     """Scan for the latest FD/IRE image."""
+    # Try metadata first
+    fp = get_latest_from_metadata('IRE', output_path)
+    if fp:
+        return fp
     base = os.path.join(output_path, "LRIT")
     if not os.path.isdir(base):
         return None
@@ -264,6 +350,10 @@ def scan_latest_ire(output_path):
 
 def scan_latest_add(output_path):
     """Scan for the latest ADD image (any non-FD/ANT directory)."""
+    # Try metadata first
+    fp = get_latest_from_metadata('ADD', output_path)
+    if fp:
+        return fp
     base = os.path.join(output_path, "LRIT")
     if not os.path.isdir(base):
         return None
@@ -282,11 +372,35 @@ def scan_latest_add(output_path):
     return None
 
 
-def get_available_dates(output_path):
+def get_available_dates(output_path, use_metadata=True):
     """Get list of available date directories with product counts."""
     base = os.path.join(output_path, "LRIT")
     if not os.path.isdir(base):
         return []
+
+    # Try metadata first (faster)
+    if use_metadata:
+        meta_path = os.path.join(output_path, "metadata.jsonl")
+        if os.path.exists(meta_path):
+            dates_dict = {}
+            try:
+                with open(meta_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line: continue
+                        entry = json.loads(line)
+                        date = entry.get("date", "")
+                        if date:
+                            dates_dict[date] = dates_dict.get(date, 0) + 1
+                if dates_dict:
+                    result = []
+                    for date, count in sorted(dates_dict.items(), reverse=True):
+                        result.append({"date": date, "count": count})
+                    return result
+            except Exception:
+                pass  # Fall through to filesystem walk
+
+    # Fallback: filesystem walk
     dates = []
     for d in sorted(os.listdir(base), reverse=True):
         date_dir = os.path.join(base, d)
@@ -761,9 +875,46 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
         return content, status, mime
 
 
-    def get_date_products(self, target_date):
+    def get_date_products(self, target_date, use_metadata=True):
         """Get all products available for a specific date."""
         base = os.path.join(dash_config.output, "LRIT", target_date)
+
+        # Try metadata first
+        if use_metadata:
+            meta_path = os.path.join(dash_config.output, "metadata.jsonl")
+            if os.path.exists(meta_path):
+                meta_entries = [e for e in load_metadata().get(target_date, [])]
+                if meta_entries:
+                    # Group by product type
+                    by_product = {}
+                    for entry in meta_entries:
+                        prod = entry.get("product", "UNKNOWN")
+                        if prod not in by_product:
+                            by_product[prod] = []
+                        by_product[prod].append(entry)
+
+                    products = []
+                    for prod_name, entries in sorted(by_product.items()):
+                        product_dir = os.path.join(base, prod_name)
+                        item = {"name": prod_name, "type": "directory", "files": []}
+                        for e in entries:
+                            fpath = e.get("path", "")
+                            if fpath:
+                                abspath = os.path.join(dash_config.output, fpath.replace("/", "\\"))
+                                info = {
+                                    "name": e.get("file_name", ""),
+                                    "path": _np(abspath)
+                                }
+                                if e.get("fc"):
+                                    info["fc"] = _np(os.path.join(dash_config.output, e["fc"].replace("/", "\\")))
+                                if e.get("ire"):
+                                    info["ire"] = _np(os.path.join(dash_config.output, e["ire"].replace("/", "\\")))
+                                item["files"].append(info)
+                        if item["files"]:
+                            products.append(item)
+                    return {"date": target_date, "products": products}
+
+        # Fallback: filesystem walk
         if not os.path.isdir(base):
             return {"date": target_date, "products": []}
 

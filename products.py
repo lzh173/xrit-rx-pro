@@ -8,6 +8,7 @@ Parsing and assembly functions for downlinked products
 import collections
 import colorama
 from colorama import Fore, Back, Style
+import hashlib
 import io
 import json
 import numpy as np
@@ -15,6 +16,7 @@ import os
 import pathlib
 import sys
 import threading
+from time import gmtime, strftime
 from PIL import Image, ImageFile, UnidentifiedImageError
 import subprocess
 
@@ -357,6 +359,14 @@ class MultiSegmentImage(Product):
             if self.name.mode == "FD":
                 self._generate_fc(channel_path)
                 self._generate_ire(channel_path)
+
+            # Append metadata
+            fc_path = os.path.join(os.path.dirname(channel_path), "FC", os.path.basename(channel_path))
+            ire_path = os.path.join(os.path.dirname(channel_path), "IRE", os.path.basename(channel_path))
+            _append_metadata(channel_path, self.name, self.name.mode, self.name.mode,
+                             fc_path if os.path.exists(fc_path) else None,
+                             ire_path if os.path.exists(ire_path) else None,
+                             self.config.output)
     
     def convert_to_img(self, path, name, data):
         """
@@ -560,6 +570,9 @@ class SingleSegmentImage(Product):
         print("    " + Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(path))
         self.last = path
 
+        _append_metadata(path, self.name, self.name.mode, "",
+                         output_path=self.config.output)
+
     def get_ext(self):
         """
         Detects output extension based on file signature
@@ -618,3 +631,77 @@ class AlphanumericText(Product):
 
         print("    " + Fore.GREEN + Style.BRIGHT + "已保存 \"{}\"".format(path))
         self.last = path
+
+        _append_metadata(path, self.name, "ANT", "",
+                         output_path=self.config.output)
+
+
+_METADATA_LOCK = threading.Lock()
+
+
+def _get_received_base(output_path):
+    """Get the received/ base directory from a full output path.
+    e.g. D:/xrit-rx/received/LRIT -> D:/xrit-rx/received
+    """
+    base = output_path
+    for suffix in ["/LRIT", "/HRIT"]:
+        if base.endswith(suffix):
+            base = base[:-len(suffix)]
+            break
+    return base
+
+
+def _append_metadata(filepath, name_obj, product_type, observation_mode,
+                     fc_path=None, ire_path=None, output_path=None):
+    """Append a metadata entry to received/metadata.jsonl.
+
+    Args:
+        filepath: absolute path to the saved file
+        name_obj: product name namedtuple (has date, time, etc.)
+        product_type: "FD", "RWW3F", "ANT", etc.
+        observation_mode: "FD" for FD images, "" for others
+        fc_path: absolute path to FC version (FD only)
+        ire_path: absolute path to IRE version (FD only)
+        output_path: self.config.output, used to compute received/ base
+    """
+    if output_path is None:
+        return
+
+    received_base = _get_received_base(output_path)
+    rel_path = os.path.relpath(filepath, received_base).replace("\\", "/")
+
+    # Compute SHA256
+    sha256_hash = ""
+    try:
+        with open(filepath, "rb") as f:
+            sha256_hash = hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        pass
+
+    entry = {
+        "file_name": os.path.basename(filepath),
+        "path": rel_path,
+        "type": name_obj.type if hasattr(name_obj, 'type') else "",
+        "product": product_type,
+        "observation_mode": observation_mode,
+        "date": "{2}{1}{0}".format(*name_obj.date) if hasattr(name_obj, 'date') else "",
+        "time": "{0}{1}{2}".format(*name_obj.time) if hasattr(name_obj, 'time') else "",
+        "saved_at": strftime("%Y-%m-%dT%H:%M:%S", gmtime()),
+        "size": os.path.getsize(filepath) if os.path.exists(filepath) else 0,
+        "sha256": sha256_hash,
+    }
+
+    # Add FC/IRE paths if available (FD only)
+    if fc_path and os.path.exists(fc_path):
+        entry["fc"] = os.path.relpath(fc_path, received_base).replace("\\", "/")
+    if ire_path and os.path.exists(ire_path):
+        entry["ire"] = os.path.relpath(ire_path, received_base).replace("\\", "/")
+
+    # Append to metadata.jsonl (thread-safe)
+    meta_dir = os.path.join(received_base, "metadata.jsonl")
+    with _METADATA_LOCK:
+        try:
+            with open(meta_dir, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            print("    " + Fore.WHITE + Back.RED + "元数据写入失败: {}".format(e))
