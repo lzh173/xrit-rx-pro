@@ -14,7 +14,6 @@ from configparser import ConfigParser, NoOptionError, NoSectionError
 from os import mkdir, path
 import socket
 from time import time, sleep
-import winsound
 
 from demuxer import Demuxer
 import ccsds as CCSDS
@@ -166,7 +165,6 @@ def loop():
                 data = sck.recv(buflen + 8)
             except ConnectionResetError:
                 print(Fore.WHITE + Back.RED + Style.BRIGHT + "丢失与 GOESRECV 的连接，正在重连...")
-                winsound.Beep(800, 500)
                 sleep(3)
                 reconnect_source()
 
@@ -178,7 +176,6 @@ def loop():
                 data = sck.recv(buflen)
             except ConnectionResetError:
                 print(Fore.WHITE + Back.RED + Style.BRIGHT + "丢失与 Open Satellite Project 的连接，正在重连...")
-                winsound.Beep(800, 500)
                 sleep(3)
                 reconnect_source()
 
